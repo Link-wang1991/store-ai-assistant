@@ -1,0 +1,3 @@
+scenario_key,module,title,scene,customer_psychology,common_mistakes,strategy,scripts,follow_up_questions,next_action,risk_note,applicable_roles,applicable_stages,source,tags
+price_objection_example,销售成交,客户嫌贵,客户了解项目后说太贵了并开始犹豫,客户不是单纯嫌贵而是没确认值不值,立刻降价或贬低同行,先共情再把价格锚定到安全/服务/适配度上并给低门槛体验,"理解您，护肤确实要选适合自己的。我们先不急着定疗程，可以先从一次体验开始，您真实感受后再决定。",您最担心的是预算还是怕做了没效果,给体验台阶并约定到店/回访时间,不得承诺疗效或虚构原价,consultant,reception,内部沉淀,"价格异议,新客转化"
+benchmark_trial_to_package,标杆案例,体验后转疗程,客户做完体验项目满意但还没办卡,客户已有初步信任但怕被继续推销,体验后立刻强推大卡,先复盘体验感受再提出巩固方案和可选择的轻量下一步,"今天这次主要是先让您感受服务和皮肤状态变化。如果您觉得舒服，我们下一步可以按您的节奏做一个短周期巩固方案，不急着一次定很大。",今天体验里您最满意哪一点,记录反馈并在24小时内做专业回访,不得夸大效果或制造焦虑,consultant,trial_unclosed,标杆案例,"体验转化,疗程成交"
