@@ -8,8 +8,11 @@
 ## 技术栈
 
 - **Next.js 14**（App Router）+ TypeScript + Tailwind CSS
-- **Supabase**：PostgreSQL + Auth
-- **AI 适配层**：`mock / deepseek / openai / claude` 可切换（默认 `mock`，无需 key 即可跑通全流程）
+- **Spring Boot 3.3 + MySQL 8.4**（backend 模式）/ **Supabase (PostgreSQL)**（supabase 模式）
+- **数据源**：`NEXT_PUBLIC_DATA_SOURCE=supabase|backend` 配置切换，`lib/db` 适配层透明切换
+- **认证**：Spring Boot JWT（backend 模式）/ Supabase Auth（supabase 模式）
+- **AI 适配层**：`mock / deepseek / qwen` 可切换（`AI_PROVIDER`）
+- **AI 模型**：文字使用 DeepSeek V4 Pro，图片识别/语音使用千问 3.6 PLUS
 - 手机网页 + PWA（可添加到手机桌面）
 
 ## 目录结构
@@ -34,18 +37,21 @@ supabase/schema.sql     数据库结构（整段执行）
 scripts/seed.mjs        演示数据初始化
 ```
 
-## 架构：可替换适配层（为后续迁移做准备）
+## 架构：可替换适配层 + 双数据源切换
 
-页面 / 组件**不直接接触 Supabase**，所有外部依赖都收敛在 4 个目录，迁移到国内云数据库时只改这几处、不动页面：
+页面 / 组件**不直接接触数据库**，所有外部依赖都收敛在适配层，通过 `NEXT_PUBLIC_DATA_SOURCE` 切换：
+
+- **supabase 模式**：`lib/db` 走 Supabase（PostgreSQL + Auth + 向量检索），部署至 Vercel
+- **backend 模式**：`lib/db` 走 Spring Boot ProxyController（`lib/db/backend-impl.ts` 自动切换），MySQL 8.4
 
 | 目录 | 职责 | 迁移做法 |
 |---|---|---|
 | `lib/auth` | 登录态、账号创建、浏览器登录/登出 | 换认证服务时改 `provider.ts` / `client.ts`，`getAuthContext()` 签名不变 |
-| `lib/db` | 所有领域数据访问（语义化方法，如 `db.employees.listByStore()`） | 新增一份同接口实现（如 `lib/db/mysql.ts`），把 `lib/db/index.ts` 的 import 换掉即可 |
+| `lib/db` | 所有领域数据访问（语义化方法） | `lib/db/index.ts` 根据 `DATA_SOURCE` 自动选择 `supabase-impl` 或 `backend-impl`（ProxyController HTTP 调用） |
 | `lib/storage` | 知识库原始文件存储 | 实现同样的 `storage.saveOriginal()` 即可（默认 `none` 不依赖存储桶） |
 | `lib/ai` | 模型调用 + 问答流程 | `AI_PROVIDER` 切换，或在 `provider.ts` 加新厂商 |
 
-底层的 `lib/supabase/*` 是唯一直接 new Supabase 客户端的地方，仅被上面 4 个适配层引用。
+底层的 `lib/supabase/*` 是唯一直接 new Supabase 客户端的地方。
 > 校验：`grep -rl "@supabase" app components lib` 只会命中 `lib/auth`、`lib/db`、`lib/storage`、`lib/supabase`。
 
 ## 本地运行（5 步）

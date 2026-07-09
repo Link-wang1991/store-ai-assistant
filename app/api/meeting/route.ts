@@ -4,9 +4,6 @@ import { db } from "@/lib/db";
 
 export const runtime = "nodejs";
 
-const CONSENT_TEXT =
-  "本次录音仅用于门店内部服务复盘、客户需求记录与后续服务优化，不对外公开。客户可随时要求停止录音或删除记录。";
-
 // 创建一次会谈（选客户/新建客户 + 场景 + 同意确认）
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -32,31 +29,33 @@ export async function POST(req: NextRequest) {
       const c = await db.customers.create({
         store_id: ctx.store.id,
         name: customerName,
-        stage: "new",
         assigned_to: ctx.employee.id,
       });
+      if (!c) return NextResponse.json({ error: "创建客户失败" }, { status: 500 });
       customerId = c.id;
     }
 
-    const now = new Date().toISOString();
+    // 已有客户但没传名字 → 从客户库查
+    let meetingCustomerName = customerName;
+    if (customerId && !meetingCustomerName) {
+      const cust = await db.customers.getById(customerId, ctx.store.id);
+      if (cust) meetingCustomerName = cust.name || "";
+    }
+
     const m = await db.meetings.create({
       store_id: ctx.store.id,
       customer_id: customerId,
       employee_id: ctx.employee.id,
       scene,
       status: "recording",
-      started_at: now,
-      consent_status: "agreed",
-      consent_text: CONSENT_TEXT,
+      customer_name: meetingCustomerName,
+      employee_name: ctx.employee.name,
     });
+    if (!m) return NextResponse.json({ error: "创建会谈失败" }, { status: 500 });
 
     await db.meetingConsents.create({
       meeting_id: m.id,
-      store_id: ctx.store.id,
-      customer_id: customerId,
-      consent_method: "checkbox",
-      consent_text: CONSENT_TEXT,
-      consented_at: now,
+      consented: true,
     });
 
     return NextResponse.json({ meetingId: m.id });

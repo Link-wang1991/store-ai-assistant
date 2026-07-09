@@ -40,6 +40,7 @@ export interface PoolCustomer {
   pool: string;
   lastVisitDays?: number | null; // 距今多少天没到店（用于工作台显示与沉睡判断）
   nextFollowLabel?: string | null; // 下次跟进时间（已格式化）
+  lastVisitDate?: string | null; // 上次到店日期（已格式化）
 }
 
 // 今日工作台优先级：值越大越该今天处理。

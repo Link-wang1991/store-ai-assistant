@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
 import { DEMO_EMAILS, DEMO_PASSWORD } from "@/lib/demo-accounts";
+import { API_BASE_URL } from "@/lib/data-source";
 
 export const runtime = "nodejs";
 
@@ -11,51 +11,34 @@ function safeNext(raw: string | null): string {
   return raw;
 }
 
-function requestOrigin(req: NextRequest): string {
-  const proto = req.headers.get("x-forwarded-proto") || req.nextUrl.protocol.replace(":", "") || "http";
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || req.nextUrl.host;
-  return `${proto}://${host}`;
-}
-
-function redirectUrl(req: NextRequest, path: string): URL {
-  return new URL(path, requestOrigin(req));
-}
-
 export async function GET(req: NextRequest) {
   if (process.env.NEXT_PUBLIC_DEMO_MODE === "false") {
-    return NextResponse.redirect(redirectUrl(req, "/login?error=demo_disabled"));
+    return NextResponse.redirect(new URL("/login?error=demo_disabled", req.url));
   }
 
   const email = (req.nextUrl.searchParams.get("email") || "").trim().toLowerCase();
   const next = safeNext(req.nextUrl.searchParams.get("next"));
   if (!DEMO_EMAIL_SET.has(email)) {
-    return NextResponse.redirect(redirectUrl(req, "/login?error=demo_account"));
+    return NextResponse.redirect(new URL("/login?error=demo_account", req.url));
   }
 
-  const redirectTo = redirectUrl(req, next);
-  let response = NextResponse.redirect(redirectTo);
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll();
-        },
-        setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
-          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
-        },
-      },
+  // 通过后端 API 登录
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password: DEMO_PASSWORD }),
+    });
+    const json = await res.json();
+    if (json.code !== 200 || !json.data?.token) {
+      return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(json.message || "登录失败")}`, req.url));
     }
-  );
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password: DEMO_PASSWORD,
-  });
 
-  if (error) {
-    return NextResponse.redirect(redirectUrl(req, `/login?error=${encodeURIComponent(error.message)}`));
+    const response = NextResponse.redirect(new URL(next, req.url));
+    const token = json.data.token;
+    response.cookies.set("store_ai_token", token, { path: "/", maxAge: 7 * 24 * 60 * 60, sameSite: "lax" });
+    return response;
+  } catch {
+    return NextResponse.redirect(new URL("/login?error=backend_unavailable", req.url));
   }
-
-  return response;
 }

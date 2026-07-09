@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getToken, knowledgeApi, customerApi } from "@/lib/api-client";
-import { QUICK_QUESTIONS } from "@/lib/constants";
+import { getToken, customerApi } from "@/lib/api-client";
+import { QUICK_QUESTIONS, type Role } from "@/lib/constants";
 import { ChatClient } from "@/components/ChatClient";
 import { CoachLanding } from "@/components/CoachLanding";
 
-export default function ChatPage() {
+function ChatPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const q = searchParams.get("q");
@@ -44,7 +44,7 @@ export default function ChatPage() {
 
   if (!token || loading) return <div className="flex h-screen items-center justify-center text-sm text-slate-400">加载中…</div>;
 
-  const role = payload?.role || "consultant";
+  const role = String(payload?.role || "consultant") as Role;
   const roleLabel = { owner: "老板", manager: "店长", consultant: "咨询师", beautician: "美容师", receptionist: "前台", operator: "运营" }[role] || role;
 
   // AI 教练首屏
@@ -65,5 +65,13 @@ export default function ChatPage() {
       customerName={customerName}
       sessions={[]}
     />
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center text-sm text-slate-400">加载中…</div>}>
+      <ChatPageInner />
+    </Suspense>
   );
 }

@@ -58,12 +58,6 @@ export function StartClient({
     window.setTimeout(() => setCopied(null), 1600);
   }
 
-  async function quickLogin(account: DemoAccount) {
-    setLoginError(null);
-    setLoadingEmail(account.email);
-    window.location.href = `/api/demo-login?email=${encodeURIComponent(account.email)}&next=${encodeURIComponent(account.entry)}`;
-  }
-
   return (
     <main className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white px-4 py-5">
@@ -131,7 +125,7 @@ export function StartClient({
               <h2 className="text-sm font-semibold text-slate-900">演示账号</h2>
               <p className="mt-1 text-xs text-slate-400">执行 seed 后可用，密码统一 demo123456。</p>
             </div>
-            <span className="text-right text-[11px] leading-5 text-slate-400">docs/demo-accounts.md</span>
+            <span className="text-right text-[11px] leading-5 text-slate-400">文档/demo-accounts.md</span>
           </div>
 
           {!demoMode ? (
@@ -154,21 +148,13 @@ export function StartClient({
                       {account.entry}
                     </span>
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="mt-3">
                     <button
                       type="button"
                       onClick={() => copy(`${account.email}\n${account.password}`, account.email)}
                       className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600"
                     >
                       {copied === account.email ? "已复制" : "复制账号"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => quickLogin(account)}
-                      disabled={loadingEmail === account.email}
-                      className="rounded-lg bg-teal-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
-                    >
-                      {loadingEmail === account.email ? "登录中" : "快速登录"}
                     </button>
                   </div>
                 </div>

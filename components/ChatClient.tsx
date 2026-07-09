@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { RISK_LEVEL_COLORS, type RiskLevel } from "@/lib/constants";
 import { chatApi, getToken } from "@/lib/api-client";
+import { submitAiFeedback } from "@/lib/actions";
 
 interface SessionItem {
   id: string;
@@ -61,16 +62,24 @@ function RichText({ text }: { text: string }) {
   );
 }
 
-function AiBubble({ m }: { m: Msg }) {
+function AiBubble({ m, onFeedback }: { m: Msg; onFeedback?: (mid: string, helpful: boolean) => void }) {
   const [open, setOpen] = useState(false);
+  const [fb, setFb] = useState<"none" | "helpful" | "notHelpful">("none");
   const idx = m.text.indexOf(ANALYSIS_MARKER);
   const main = idx >= 0 ? m.text.slice(0, idx).trim() : m.text;
   const analysis = idx >= 0 ? m.text.slice(idx + ANALYSIS_MARKER.length).trim() : "";
+  const isAgentAction = /\n\n✅/.test(main);
+
+  function clickFeedback(helpful: boolean) {
+    if (fb !== "none") return;
+    setFb(helpful ? "helpful" : "notHelpful");
+    onFeedback?.(m.id, helpful);
+  }
 
   return (
     <div className="flex justify-start">
       <div className="max-w-[88%]">
-        <div className="rounded-2xl rounded-bl-sm bg-slate-100 px-3.5 py-2.5 text-sm leading-relaxed text-slate-800">
+        <div className={`rounded-2xl rounded-bl-sm px-3.5 py-2.5 text-sm leading-relaxed ${isAgentAction ? "bg-brand/5 text-slate-700" : "bg-slate-100 text-slate-800"}`}>
           <RichText text={main} />
         </div>
 
@@ -80,7 +89,7 @@ function AiBubble({ m }: { m: Msg }) {
               onClick={() => setOpen((o) => !o)}
               className="inline-flex items-center gap-1 rounded-full border border-brand/30 bg-brand/5 px-2.5 py-1 text-[11px] font-medium text-brand-dark transition-colors hover:bg-brand/10"
             >
-              {open ? "▴ 收起分析" : "📋 分析思路与策略 · 点开看为什么"}
+              {open ? "▴ 收起分析" : "📋 分析思路与策略"}
             </button>
             {open && (
               <div className="mt-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs leading-relaxed text-slate-600">
@@ -104,6 +113,32 @@ function AiBubble({ m }: { m: Msg }) {
             )}
           </div>
         )}
+
+        {/* 反馈按钮 */}
+        <div className="mt-1 flex items-center gap-2 pl-1">
+          <button
+            onClick={() => clickFeedback(true)}
+            disabled={fb !== "none"}
+            className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] transition-colors ${
+              fb === "helpful"
+                ? "bg-green-100 text-green-700"
+                : "bg-slate-50 text-slate-400 hover:bg-green-50 hover:text-green-600"
+            }`}
+          >
+            👍 {fb === "helpful" ? "有用" : ""}
+          </button>
+          <button
+            onClick={() => clickFeedback(false)}
+            disabled={fb !== "none"}
+            className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] transition-colors ${
+              fb === "notHelpful"
+                ? "bg-red-100 text-red-700"
+                : "bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-600"
+            }`}
+          >
+            👎 {fb === "notHelpful" ? "没用" : ""}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -145,6 +180,16 @@ export function ChatClient({
   }, [messages, loading]);
 
   const autoSentRef = useRef(false);
+
+  // AI 回答反馈处理
+  const handleFeedback = useCallback(async (messageId: string, isHelpful: boolean) => {
+    try {
+      await submitAiFeedback({ messageId, isHelpful });
+    } catch {
+      // 静默失败，不影响体验
+    }
+  }, []);
+
   useEffect(() => {
     if (initialQuestion && !autoSentRef.current && messages.length === 0) {
       autoSentRef.current = true;
@@ -182,7 +227,7 @@ export function ChatClient({
 
   async function sendImage(file: File, hint: string) {
     if (loading) return;
-    setMessages((m) => [...m, { id: "ui" + Date.now(), role: "user", text: `📷 [图片${hint ? "·" + hint : ""}]` })]);
+    setMessages((m) => [...m, { id: "ui" + Date.now(), role: "user", text: `📷 [图片${hint ? "·" + hint : ""}]` }]);
     setMessages((m) => [...m, { id: "ei" + Date.now(), role: "ai", text: "图片识别功能暂未接入后端，即将支持。" }]);
   }
 
@@ -242,7 +287,7 @@ export function ChatClient({
               </div>
             </div>
           ) : (
-            <AiBubble key={m.id} m={m} />
+            <AiBubble key={m.id} m={m} onFeedback={handleFeedback} />
           )
         )}
         {loading && (

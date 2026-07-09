@@ -58,7 +58,7 @@ async function main() {
   const storeId = args.find((a) => a.startsWith("--store="))?.split("=")[1] || null;
   const file =
     args.find((a) => a.startsWith("--file="))?.split("=")[1] ||
-    "docs/templates/growth-playbooks-template.csv";
+    "../文档/templates/growth-playbooks-template.csv";
 
   const csvPath = path.resolve(process.cwd(), file);
   const raw = readFileSync(csvPath, "utf8");

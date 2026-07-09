@@ -14,9 +14,11 @@ export async function middleware(request: NextRequest) {
   // 公开路由：无需鉴权
   const isPublic =
     path === "/start" ||
+    path === "/" ||
     path.startsWith("/_next") ||
     path.startsWith("/api/") ||
     path === "/login" ||
+    path === "/register" ||
     path === "/manifest.webmanifest" ||
     path === "/favicon.ico";
 

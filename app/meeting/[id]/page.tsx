@@ -1,224 +1,326 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { getAuthContext } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { PageHeader, Card } from "@/components/ui";
-import { ActionButton } from "@/components/ActionButton";
+import { API_BASE_URL } from "@/lib/data-source";
+import { getToken } from "@/lib/api-client";
 import { MeetingProcessing } from "@/components/MeetingProcessing";
 import { ExperienceDistill, type ExperienceCandidate } from "@/components/ExperienceDistill";
-import { deleteMeetingRecording, deleteMeeting, reanalyzeMeeting } from "@/lib/actions";
-import { canEnterAdmin } from "@/lib/permissions";
 import { BottomNav, MAIN_NAV, STAFF_NAV } from "@/components/BottomNav";
+import { isAdminRole } from "@/lib/constants";
 import { SCENE_LABEL } from "@/lib/scenes";
 import { fmtTime } from "@/lib/format";
+import { retryMeetingTranscription } from "@/lib/actions";
 
-export const dynamic = "force-dynamic";
 const STATUS_LABEL: Record<string, string> = {
-  recording: "录音中", transcribing: "转写中", analyzing: "AI 分析中", done: "已完成", failed: "处理失败",
+  recording: "录音中", uploaded: "已上传待处理", transcribing: "转写中", analyzing: "AI 分析中", done: "已完成", failed: "处理失败",
 };
 const ROLE_LABEL: Record<string, string> = {
   employee: "员工", customer: "客户", manager: "店长", other: "其他",
 };
 
-// 清理 AI 输出里的裸 markdown 符号，避免"排版乱七八糟"
 function clean(v: any): string {
   if (typeof v !== "string") return String(v ?? "");
-  return v
-    .replace(/\*\*/g, "")
-    .replace(/^#{1,6}\s*/gm, "")
-    .replace(/^\s*[-*]\s+/gm, "· ")
-    .trim();
+  return v.replace(/\*\*/g, "").replace(/^#{1,6}\s*/gm, "").replace(/^\s*[-*]\s+/gm, "· ").trim();
 }
 
-function Field({ label, value }: { label: string; value: any }) {
-  if (!value || (typeof value === "string" && !value.trim())) return null;
+function OverviewItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="mb-2">
-      {label && <div className="text-[11px] text-slate-400">{label}</div>}
-      <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{clean(value)}</div>
+    <div className="flex items-center gap-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--green-soft)] text-[var(--green)]">{icon}</div>
+      <div>
+        <div className="text-[11px] text-[var(--faint)]">{label}</div>
+        <div className="text-[13px] font-medium text-[var(--ink)]">{value}</div>
+      </div>
     </div>
   );
 }
 
-export default async function MeetingReportPage({ params }: { params: { id: string } }) {
-  const ctx = (await getAuthContext())!;
-  if (!ctx) redirect("/login");
+function AnalysisCard({ icon, title, content, accent = "green" }: { icon: React.ReactNode; title: string; content: string | null; accent?: string }) {
+  if (!content) return null;
+  const accentMap: Record<string, { bg: string; text: string; border: string }> = {
+    green: { bg: "bg-[var(--green-soft)]", text: "text-[var(--green)]", border: "border-emerald-100" },
+    yellow: { bg: "bg-[var(--yellow-soft)]", text: "text-[var(--yellow)]", border: "border-amber-100" },
+    red: { bg: "bg-[var(--red-soft)]", text: "text-[var(--red)]", border: "border-red-100" },
+    blue: { bg: "bg-[var(--blue-soft)]", text: "text-[var(--blue)]", border: "border-blue-100" },
+  };
+  const a = accentMap[accent] || accentMap.green;
+  return (
+    <div className={`rounded-xl border ${a.border} bg-white p-3.5`}>
+      <div className="mb-2 flex items-center gap-2">
+        <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${a.bg} ${a.text}`}>{icon}</div>
+        <span className="text-[13px] font-semibold text-[var(--ink)]">{title}</span>
+      </div>
+      <p className="text-[12px] leading-relaxed text-[var(--muted)]">{clean(content)}</p>
+    </div>
+  );
+}
 
-  const m: any = await db.meetings.getById(params.id, ctx.store.id);
-  if (!m) notFound();
+function Icon({ name, className = "" }: { name: string; className?: string }) {
+  const paths: Record<string, string> = {
+    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    lightbulb: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-7 7c0 2 1 3.5 2.5 5l.5.5V18h8v-3.5l.5-.5c1.5-1.5 2.5-3 2.5-5a7 7 0 0 0-7-7Z"/>',
+    alert: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+    target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  };
+  const d = paths[name] || "";
+  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: d }} />;
+}
 
-  // 权限：员工只能看自己的；店长/老板可看本店
-  const isMgr = ["owner", "manager"].includes(ctx.baseRole);
-  if (m.employee_id !== ctx.employee.id && !isMgr) redirect("/meeting");
+/** 统一 API 请求 */
+function apiCall<T>(path: string): Promise<{ ok: boolean; data?: T }> {
+  const t = getToken();
+  return fetch(`${API_BASE_URL}${path}`, {
+    headers: { Authorization: `Bearer ${t}` },
+  })
+    .then(r => r.json())
+    .then(j => ({ ok: j.code === 200, data: j.data }));
+}
 
-  // 合规：访问转写/报告留痕
-  await db.meetingAccessLogs.log({
-    store_id: ctx.store.id, meeting_id: params.id, employee_id: ctx.employee.id, action: "view_transcript",
-  }).catch(() => {});
+export default function MeetingReportPage({ params }: { params: { id: string } }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [role, setRole] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [m, setM] = useState<any>(null);
+  const [analysis, setAnalysis] = useState<any>(null);
+  const [trans, setTrans] = useState<any[]>([]);
+  const [employeeName, setEmployeeName] = useState("");
+  const [retrying, setRetrying] = useState(false);
 
-  const a: any = await db.meetingAnalysis.getByMeeting(params.id, ctx.store.id);
-  const trans = (await db.meetingTranscripts.listByMeeting(params.id, ctx.store.id)) as any[];
+  useEffect(() => {
+    const t = getToken();
+    if (!t) { router.replace("/login"); return; }
 
-  // 可沉淀为门店经验：从复盘里提炼可复用的做法/话术/流程
+    let r = "";
+    try {
+      const raw = t.split(".")[1];
+      const utf8 = decodeURIComponent(escape(atob(raw)));
+      const p = JSON.parse(utf8);
+      r = p.role || "";
+      setRole(r);
+      setIsAdmin(isAdminRole(r));
+      setEmployeeName(p.name || "");
+    } catch { router.replace("/login"); return; }
+
+    const bid = params.id;
+    Promise.allSettled([
+      apiCall<any>(`/api/meetings/${bid}`),
+      apiCall<any>(`/api/meetings/${bid}/analysis`),
+      apiCall<any[]>(`/api/meetings/${bid}/transcripts`),
+    ]).then(([mr, ar, tr]) => {
+      const meeting = mr.status === "fulfilled" && mr.value?.ok ? mr.value.data : null;
+      if (!meeting) { setError("会谈不存在"); setLoading(false); return; }
+      setM(meeting);
+      if (ar.status === "fulfilled" && ar.value?.ok && ar.value.data) {
+        const list = ar.value.data;
+        setAnalysis(Array.isArray(list) && list.length > 0 ? list[0] : list);
+      }
+      if (tr.status === "fulfilled" && tr.value?.ok && Array.isArray(tr.value.data)) setTrans(tr.value.data);
+      setLoading(false);
+    });
+  }, [router, params.id]);
+
+  if (loading) return (
+    <div className="flex h-screen items-center justify-center bg-[var(--page)]">
+      <div className="text-center">
+        <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--green)]" />
+        <p className="mt-3 text-sm text-[var(--faint)]">加载会谈复盘…</p>
+      </div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="flex h-screen flex-col items-center justify-center bg-[var(--page)] gap-3">
+      <p className="text-sm text-[var(--faint)]">{error}</p>
+      <Link href="/meeting" className="text-sm text-[var(--green)]">← 返回会谈列表</Link>
+    </div>
+  );
+
   const sceneName = SCENE_LABEL[m.scene] || m.scene;
+  const nav = isAdmin ? MAIN_NAV : STAFF_NAV;
+  const customerName = m.customer_records?.name || "临时客户";
+  const hasAnalysis = analysis && (analysis.summary || analysis.key_points || analysis.explicit_needs);
+
+  async function handleRetryTranscription() {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      const res = await retryMeetingTranscription(params.id);
+      if (res.ok) {
+        router.refresh();
+      } else {
+        alert(res.message || "重新提交转写失败");
+      }
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  // 优先用后端保存的 duration，其次从转写时间差计算
+  let durationStr = "--";
+  if (m.duration && m.duration > 0) {
+    const min = Math.floor(m.duration / 60);
+    const sec = m.duration % 60;
+    durationStr = `${min}分${sec}秒`;
+  } else if (trans.length >= 2) {
+    const first = new Date(trans[0].created_at).getTime();
+    const last = new Date(trans[trans.length - 1].created_at).getTime();
+    const diff = Math.round((last - first) / 1000);
+    const min = Math.floor(diff / 60);
+    const sec = diff % 60;
+    durationStr = `${min}分${sec}秒`;
+  }
+
   const distill: ExperienceCandidate[] = [];
-  if (a?.suggested_script) distill.push({ title: `${sceneName} · 有效回应话术`, content: a.suggested_script });
-  if (a?.employee_did_well) distill.push({ title: `${sceneName} · 值得复制的做法`, content: a.employee_did_well });
-  if (a?.followup_goal) distill.push({ title: `${sceneName} · 跟进流程`, content: a.followup_goal });
+  if (analysis?.suggested_script) distill.push({ title: `${sceneName} · 有效回应话术`, content: analysis.suggested_script });
+  if (analysis?.employee_did_well) distill.push({ title: `${sceneName} · 值得复制的做法`, content: analysis.employee_did_well });
+  if (analysis?.followup_goal) distill.push({ title: `${sceneName} · 跟进流程`, content: analysis.followup_goal });
 
   return (
-    <div className="min-h-screen pb-16">
-      <PageHeader
-        title={`${m.customer_records?.name || "临时客户"} · 会谈复盘`}
-        subtitle={`${SCENE_LABEL[m.scene] || m.scene} · ${fmtTime(m.created_at)} · ${m.employees?.name || ""}`}
-      />
-      <div className="space-y-3 p-4">
+    <div className="min-h-screen bg-[var(--page)] pb-20">
+      {/* 顶部 */}
+      <div className="bg-[var(--green)] px-4 pb-4 pt-3">
         <div className="flex items-center justify-between">
-          <div className="flex gap-3 text-xs">
-            <Link href="/meeting" className="text-brand-dark">会谈</Link>
-            <Link href="/work" className="text-slate-500">工作台</Link>
-          </div>
-          <div className="flex gap-3">
-            {m.status === "done" && (
-              <ActionButton
-                action={reanalyzeMeeting.bind(null, m.id)}
-                label="重新分析"
-                confirmText="用最新 AI 重新分析这次会谈？会覆盖现有复盘报告。"
-                className="text-xs text-[var(--green-dark)]"
-              />
-            )}
-            {m.audio_url && (
-              <ActionButton
-                action={deleteMeetingRecording.bind(null, m.id)}
-                label="删除录音"
-                confirmText="删除录音后无法再听原声，但复盘报告保留。确定删除？"
-                className="text-xs text-slate-400"
-              />
-            )}
-            <ActionButton
-              action={deleteMeeting.bind(null, m.id)}
-              label="删除会谈"
-              confirmText="将删除这次会谈的录音、转写和复盘报告，且不可恢复。确定删除？"
-              className="text-xs text-red-500"
-              redirectTo={isMgr ? "/admin/meetings" : "/meeting"}
-            />
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/20 text-white font-bold text-[13px]">H</div>
+            <div>
+              <div className="text-[15px] font-semibold text-white">门店 AI Inbox</div>
+              <div className="text-[11px] text-white/70">咨询成交提效 · 护理/销售/回访</div>
+            </div>
           </div>
         </div>
+      </div>
 
+      {/* 绿色状态卡片 */}
+      <div className="mx-4 -mt-2 rounded-2xl bg-[var(--green)] p-4 text-white shadow-lg shadow-emerald-900/10">
+        <div className="text-center">
+          <div className="text-[16px] font-semibold">
+            {customerName} · {sceneName}
+          </div>
+          <div className="mt-1 text-[12px] text-white/70">
+            {m.status === "done" ? "AI 已对本次会谈进行复盘分析" : STATUS_LABEL[m.status] || m.status}
+          </div>
+        </div>
+        {m.status === "done" && (
+          <div className="mt-3 flex justify-center">
+            {trans.length > 0 && (
+              <Link href="#transcript" className="rounded-full bg-white px-4 py-1.5 text-[12px] font-medium text-[var(--green)] shadow-sm transition active:scale-95">
+                查看完整会谈记录
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 概览 */}
+      <div className="mx-4 mt-4">
+        <h2 className="mb-2 text-[15px] font-semibold text-[var(--ink)]">本次会谈概览</h2>
+        <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
+          <div className="grid grid-cols-2 gap-4">
+            <OverviewItem icon={<Icon name="clock" className="h-4 w-4" />} label="会谈时长" value={durationStr} />
+            <OverviewItem icon={<Icon name="check" className="h-4 w-4" />} label="会谈时间" value={fmtTime(m.created_at)} />
+            <OverviewItem icon={<Icon name="user" className="h-4 w-4" />} label="客户" value={customerName} />
+            <OverviewItem icon={<Icon name="user" className="h-4 w-4" />} label="参与员工" value={m.employee_name || employeeName || "--"} />
+          </div>
+        </div>
+      </div>
+
+      {/* 分析卡片 */}
+      <div className="mx-4 mt-4">
         {m.status !== "done" ? (
           m.status === "transcribing" || m.status === "analyzing" ? (
-            <Card><MeetingProcessing id={params.id} initialStatus={m.status} /></Card>
-          ) : (
-            <Card>
-              <p className="text-sm text-slate-500">
-                当前状态：{STATUS_LABEL[m.status] || m.status}。
-                {m.status === "failed" ? "这次转写没成功（多为录音格式/网络问题）。" : m.status === "recording" ? "这次录音未完成上传。" : "稍后刷新查看。"}
-              </p>
-              {(m.status === "failed" || m.status === "recording") && (
-                <div className="mt-3 flex gap-2">
-                  <Link href="/meeting" className="inline-block rounded-lg bg-[var(--green-soft)] px-4 py-2 text-sm font-medium text-[var(--green-dark)]">
-                    重新录制一次
-                  </Link>
-                  <ActionButton
-                    action={deleteMeeting.bind(null, m.id)}
-                    label="删除这条"
-                    confirmText="删除这条失败/未完成的会谈记录？"
-                    className="rounded-lg border border-[var(--line)] px-4 py-2 text-sm text-slate-500"
-                    redirectTo={isMgr ? "/admin/meetings" : "/meeting"}
-                  />
+            <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
+              <MeetingProcessing id={params.id} initialStatus={m.status} />
+              {m.status === "transcribing" && (
+                <div className="mt-4 border-t border-[var(--line)] pt-3 text-center">
+                  <button
+                    onClick={handleRetryTranscription}
+                    disabled={retrying}
+                    className="rounded-full bg-[var(--green)] px-4 py-2 text-[12px] font-medium text-white disabled:opacity-50"
+                  >
+                    {retrying ? "提交中…" : "重新提交转写"}
+                  </button>
+                  <p className="mt-1 text-[10px] text-[var(--faint)]">卡在转写中较久？可尝试重新提交</p>
                 </div>
               )}
-            </Card>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
+              <p className="text-sm text-[var(--muted)]">
+                当前状态：{STATUS_LABEL[m.status] || m.status}。
+                {m.status === "failed" ? "分析失败了，转写内容可在下方查看。" : m.status === "recording" ? "这次录音未完成上传。" : "稍后刷新查看。"}
+              </p>
+            </div>
           )
-        ) : !a ? (
-          <Card><p className="text-sm text-slate-400">暂无分析报告。</p></Card>
+        ) : !hasAnalysis ? (
+          <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
+            <p className="text-sm text-[var(--faint)]">暂无分析报告。</p>
+          </div>
         ) : (
           <>
-            {a.need_manager_involved && (
-              <Card className="border-amber-200 bg-amber-50">
-                <p className="text-sm font-medium text-amber-800">建议店长/老板介入跟进这单</p>
-              </Card>
+            <div className="grid grid-cols-2 gap-2.5">
+              <AnalysisCard icon={<Icon name="message" className="h-4 w-4" />} title="会谈摘要" content={analysis.summary || analysis.key_points} accent="green" />
+              <AnalysisCard icon={<Icon name="lightbulb" className="h-4 w-4" />} title="真实需求" content={analysis.explicit_needs || analysis.implicit_needs} accent="blue" />
+              <AnalysisCard icon={<Icon name="alert" className="h-4 w-4" />} title="主要顾虑" content={analysis.decision_barriers} accent="yellow" />
+              <AnalysisCard icon={<Icon name="star" className="h-4 w-4" />} title="员工亮点" content={analysis.employee_did_well} accent="green" />
+              <AnalysisCard icon={<Icon name="target" className="h-4 w-4" />} title="错失机会" content={analysis.missed_opportunities} accent="yellow" />
+              <AnalysisCard icon={<Icon name="shield" className="h-4 w-4" />} title="合规风险" content={analysis.compliance_risks} accent="red" />
+            </div>
+
+            {/* 深度复盘 */}
+            {(analysis.emotional_needs || analysis.employee_to_improve) && (
+              <div className="mt-3 rounded-2xl border border-[var(--line)] bg-white p-4">
+                <div className="mb-2 text-[14px] font-semibold text-[var(--ink)]">深度复盘</div>
+                {analysis.emotional_needs && <div className="mb-2"><div className="text-[11px] text-[var(--faint)]">情绪 / 深层需求</div><div className="text-[13px] leading-relaxed text-[var(--muted)]">{clean(analysis.emotional_needs)}</div></div>}
+                {analysis.employee_to_improve && <div><div className="text-[11px] text-[var(--faint)]">不到位 / 后续要规避的</div><div className="text-[13px] leading-relaxed text-[var(--muted)]">{clean(analysis.employee_to_improve)}</div></div>}
+              </div>
             )}
 
-            <Card>
-              <div className="mb-2 text-sm font-semibold text-slate-700">会谈摘要</div>
-              <Field label="" value={a.summary} />
-              <Field label="谈话重点" value={a.key_points} />
-            </Card>
-
-            <Card>
-              <div className="mb-2 text-sm font-semibold text-slate-800">① 客户潜在需求</div>
-              <Field label="显性需求（客户明说的）" value={a.explicit_needs} />
-              <Field label="隐性需求（没明说但存在）" value={a.implicit_needs} />
-              {!a.explicit_needs && !a.implicit_needs && <p className="text-xs text-slate-400">本次未识别到明确需求。</p>}
-            </Card>
-
-            <Card>
-              <div className="mb-2 text-sm font-semibold text-slate-800">② 客户顾虑 / 没成交的卡点</div>
-              <Field label="" value={a.decision_barriers} />
-              {!a.decision_barriers && <p className="text-xs text-slate-400">本次未识别到明显顾虑。</p>}
-            </Card>
-
-            <Card>
-              <div className="mb-2 text-sm font-semibold text-slate-800">③ 客户性格色彩</div>
-              <Field label="性格底色" value={a.customer_personality} />
-              <Field label="沟通偏好" value={a.customer_comm_pref} />
-              <Field label="消费能力" value={a.customer_spending_power} />
-              {!a.customer_personality && !a.customer_comm_pref && !a.customer_spending_power && <p className="text-xs text-slate-400">本次会谈信息不足以判断。</p>}
-            </Card>
-
-            <Card>
-              <div className="mb-2 text-sm font-semibold text-slate-800">④ 还没挖到的潜在痛点</div>
-              <Field label="情绪 / 深层需求" value={a.emotional_needs} />
-              <Field label="本次错失、下次该抓的点" value={a.missed_opportunities} />
-              {!a.emotional_needs && !a.missed_opportunities && <p className="text-xs text-slate-400">本次未发现明显遗漏。</p>}
-            </Card>
-
-            <Card>
-              <div className="mb-2 text-sm font-semibold text-slate-800">⑤ 美容师沟通复盘</div>
-              <Field label="聊得好的地方" value={a.employee_did_well} />
-              <Field label="不到位 / 后续要规避的" value={a.employee_to_improve} />
-            </Card>
-
-            {(a.service_experience_risk || a.compliance_risks) && (
-              <Card className="border-red-100">
-                <div className="mb-2 text-sm font-semibold text-slate-700">风险提示</div>
-                <Field label="服务体验风险" value={a.service_experience_risk} />
-                <Field label="合规风险" value={a.compliance_risks} />
-              </Card>
+            {/* 下一步跟进 */}
+            {(analysis.followup_goal || analysis.suggested_script) && (
+              <div className="mt-3 rounded-2xl border border-[var(--green)]/20 bg-[var(--green-soft)]/40 p-4">
+                <div className="mb-2 text-[14px] font-semibold text-[var(--green-dark)]">下一步跟进</div>
+                {analysis.followup_goal && <div className="mb-2"><div className="text-[11px] text-[var(--faint)]">跟进目标</div><div className="text-[13px] leading-relaxed text-[var(--muted)]">{clean(analysis.followup_goal)}</div></div>}
+                {analysis.suggested_script && <div><div className="text-[11px] text-[var(--faint)]">建议话术</div><div className="rounded-xl bg-white p-3 mt-1 text-[13px] leading-relaxed text-[var(--ink)]">{clean(analysis.suggested_script)}</div></div>}
+              </div>
             )}
 
-            <Card className="border-brand/30 bg-brand/5">
-              <div className="mb-2 text-sm font-semibold text-brand-dark">下一步跟进</div>
-              <Field label="跟进目标" value={a.followup_goal} />
-              <Field label="建议跟进时间" value={a.suggested_followup_at ? fmtTime(a.suggested_followup_at) : null} />
-              <Field label="建议话术（可直接说）" value={a.suggested_script} />
-              <p className="mt-1 text-[11px] text-slate-400">已自动写入客户记忆与增长机会，可在客户档案与作战室查看。</p>
-            </Card>
-
-            {/* 可沉淀为门店经验 */}
+            {/* 可沉淀经验 */}
             <ExperienceDistill candidates={distill} />
-
-            {/* ⑥ 完整录音翻译 */}
-            {trans.length > 0 && (
-              <section>
-                <h2 className="mb-2 px-1 text-sm font-semibold text-slate-800">⑥ 录音翻译（完整对话）</h2>
-                <div className="space-y-2">
-                  {trans.map((t) => (
-                    <Card key={t.id}>
-                      <div className="mb-0.5 text-[11px] font-medium text-brand-dark">
-                        {ROLE_LABEL[t.speaker_role] || t.speaker_role || t.speaker}
-                      </div>
-                      <div className="text-sm text-slate-700">{t.content}</div>
-                    </Card>
-                  ))}
-                </div>
-              </section>
-            )}
           </>
         )}
       </div>
-      <BottomNav items={canEnterAdmin(ctx) ? MAIN_NAV : STAFF_NAV} />
+
+      {/* 完整录音翻译：只要有转写内容就展示（不论状态） */}
+      {trans.length > 0 && (<section id="transcript" className="mx-4 mt-4">
+          <h2 className="mb-2 text-[15px] font-semibold text-[var(--ink)]">录音转写（完整对话）</h2>
+          <div className="space-y-2">
+            {trans.map((t: any) => (
+              <div key={t.id} className="rounded-2xl border border-[var(--line)] bg-white p-3.5">
+                <div className="mb-0.5 text-[11px] font-medium text-[var(--green)]">
+                  {ROLE_LABEL[t.speaker_role] || t.speaker_role || t.speaker}
+                </div>
+                <div className="text-[13px] text-[var(--muted)]">{t.content}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* 操作栏 */}
+      <div className="mx-4 mt-4 mb-4 flex items-center justify-between">
+        <Link href="/meeting" className="text-[12px] text-[var(--green)] font-medium">← 返回会谈列表</Link>
+      </div>
+
+      <BottomNav items={nav} />
     </div>
   );
 }

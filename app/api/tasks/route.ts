@@ -1,5 +1,6 @@
 // ============================================================
-// GET /api/tasks — Supabase 直连模式：任务列表
+// GET /api/tasks — Supabase 直连模式：个人任务列表
+// 首页用，每个人都只看自己负责的任务
 // 可选 ?status= 过滤
 // ============================================================
 
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const status = req.nextUrl.searchParams.get("status");
-    let data = await db.tasks.listByStore(auth.storeId);
+    let data = await db.tasks.listByAssignee(auth.storeId, auth.employeeId);
     if (status) {
       data = data.filter((t: any) => t.status === status);
     }

@@ -12,6 +12,11 @@ import { roleLabel as resolveRoleLabel } from "../roles";
 import { getDataScope } from "../permissions";
 import { assignPool, POOL_PRIORITY } from "../customer-pools";
 import type { AuthContext } from "../types";
+import {
+  parseAgentActions,
+  stripAgentActions,
+  executeAgentActions,
+} from "../agent";
 
 type AnswerType = "knowledge" | "general" | "need_confirm" | "risk";
 
@@ -24,6 +29,8 @@ export interface AnswerResult {
   retrieved: RetrievedChunk[];
   needsReview: boolean;
   bannedHit: string[];
+  /** Agent 自动执行的结构化行动结果 */
+  agentActions?: Array<{ type: string; label: string; success: boolean; detail: string }>;
 }
 
 async function loadBannedWords(storeId: string): Promise<string[]> {
@@ -216,6 +223,8 @@ export async function answerQuestion(
       role: baseRole,
       roleLabel: label,
       bannedWords,
+      enableAgentActions: !!(customerId || isCustomerDigestQuery(question)),
+      customerId: customerId || undefined,
     });
     const user = buildUserPrompt(question, contextPieces, playbookTexts, customerProfile, storeMemory);
     // 结合本次对话上文：取该会话最近几轮，喂给模型做多轮上下文（话术部分，去掉分析块）
@@ -250,6 +259,30 @@ export async function answerQuestion(
       ],
           answerType,
         });
+    }
+  }
+
+  // 4b. Agent 行动解析与执行（从 AI 回答中提取结构化行动并自动执行）
+  let agentResults: Array<{ type: string; label: string; success: boolean; detail: string }> = [];
+  const enableAgent = !!(customerId || isCustomerDigestQuery(question));
+  if (enableAgent && answerType !== "risk") {
+    const parsedActions = parseAgentActions(answer);
+    if (parsedActions.length > 0) {
+      // 从回答文本中移除行动标记，用户看不到
+      answer = stripAgentActions(answer);
+      const results = await executeAgentActions(ctx, parsedActions, customerId);
+      agentResults = results.map((r) => ({
+        type: r.actionType,
+        label: r.label,
+        success: r.success,
+        detail: r.detail,
+      }));
+      // 在回答末尾追加友好提示（行动执行成功摘要）
+      const successes = results.filter((r) => r.success);
+      if (successes.length > 0) {
+        const summary = successes.map((r) => `✅ ${r.detail}`).join("\n");
+        answer += `\n\n${summary}`;
+      }
     }
   }
 
@@ -333,7 +366,7 @@ export async function answerQuestion(
       status: "pending",
     });
   } else if (answerType === "general") {
-    const existing = await db.gaps.findPending(storeId, question);
+    const existing = await db.gaps.findPending(storeId, question) as any;
     if (existing) {
       await db.gaps.setFrequency(existing.id, ((existing.frequency as number) || 1) + 1);
     } else {
@@ -357,5 +390,6 @@ export async function answerQuestion(
     retrieved,
     needsReview,
     bannedHit,
+    agentActions: agentResults.length > 0 ? agentResults : undefined,
   };
 }

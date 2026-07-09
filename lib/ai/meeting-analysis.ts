@@ -217,5 +217,69 @@ ${transcriptText}`;
     try { await db.customers.update(customerId, storeId, patch); } catch {}
   }
 
+  // 7) 自动生成跟进任务（闭环：分析结果 → 任务）
+  try {
+    await createFollowupTaskFromAnalysis(storeId, employeeId, customerId, meeting, a, followAt);
+  } catch {
+    // 任务创建失败不影响主流程
+  }
+
   await db.meetings.update(meetingId, storeId, { analysis_status: "done", status: "done" });
+}
+
+/** 从会谈分析结果自动生成跟进任务 */
+async function createFollowupTaskFromAnalysis(
+  storeId: string,
+  employeeId: string,
+  customerId: string | null,
+  meeting: any,
+  analysis: AnalysisJson,
+  followAt: string | null
+): Promise<void> {
+  const custName = meeting.customer_records?.name || "客户";
+
+  // 7a) 有跟进目标 → 创建跟进任务
+  if (analysis.followup_goal && customerId) {
+    const deadline = followAt || new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+    const scriptHint = analysis.suggested_script
+      ? `\n推荐话术：${analysis.suggested_script.slice(0, 200)}`
+      : "";
+    await db.tasks.create({
+      store_id: storeId,
+      title: `会谈跟进：${custName} － ${analysis.followup_goal.slice(0, 30)}`,
+      content: `来自会谈分析\n目标：${analysis.followup_goal}${scriptHint}`,
+      task_type: "客户跟进",
+      assigned_to: employeeId,
+      deadline,
+      status: "todo",
+      created_by: employeeId,
+    });
+  }
+
+  // 7b) 有错失机会 → 创建增长机会任务
+  if (analysis.missed_opportunities && customerId) {
+    await db.tasks.create({
+      store_id: storeId,
+      title: `挽回机会：${custName} － ${analysis.missed_opportunities.slice(0, 30)}`,
+      content: `会谈中发现的错失机会：${analysis.missed_opportunities}`,
+      task_type: "客户跟进",
+      assigned_to: employeeId,
+      deadline: followAt || new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10),
+      status: "todo",
+      created_by: employeeId,
+    });
+  }
+
+  // 7c) 需要管理者介入 → 创建待确认问题
+  if (analysis.need_manager_involved) {
+    await db.pending.create({
+      store_id: storeId,
+      employee_id: employeeId,
+      question: `【会谈升级】${custName}的会谈需要店长/老板介入处理`,
+      ai_suggestion: analysis.summary?.slice(0, 500) || "",
+      category: "其他问题",
+      risk_level: "L3",
+      status: "pending",
+    });
+  }
 }

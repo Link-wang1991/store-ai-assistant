@@ -1,8 +1,9 @@
 import { ROLE_LABELS, type Role } from "../constants";
 import { ROLE_PERSPECTIVE } from "./role-prompts";
+import { buildAgentActionInstruction } from "../agent/actions";
 
 // ============================================================
-// Prompt 构建（门店专属 Hermes：角色化 + 合规 + 融合方法论 + 结构化输出）
+// Prompt 构建（门店专属 Agent：角色化 + 合规 + 融合方法论 + 结构化输出 + 行动执行）
 // ============================================================
 
 // 回答结构：话术前置（员工直接用）+ 分析思路与策略后置（折叠可展开）
@@ -29,12 +30,29 @@ export function buildSystemPrompt(opts: {
   role: Role;
   roleLabel?: string;
   bannedWords: string[];
+  /** 启用 Agent 行动能力（AI 可输出结构化行动建议，系统自动执行） */
+  enableAgentActions?: boolean;
+  /** 当前对话关联的客户 ID（用于 Agent 行动权限判断） */
+  customerId?: string;
 }): string {
-  const { storeName, brandName, role, bannedWords } = opts;
+  const { storeName, brandName, role, bannedWords, enableAgentActions, customerId } = opts;
   const label = opts.roleLabel || ROLE_LABELS[role];
   const banned = bannedWords.length > 0 ? bannedWords.join("、") : "（暂无门店自定义禁用词）";
 
-  return `你是「${brandName || storeName}」门店里经验最丰富、业绩最好的金牌咨询师本人，不是机器人、不是客服。你的使命：帮老板提升业绩、帮员工更会成交和服务、帮客户获得更好体验。
+  const identity = enableAgentActions
+    ? `你是「${brandName || storeName}」的智能岗位助手（Agent），既是经验最丰富的金牌咨询师，也是能主动采取行动的 AI 助手。你可以分析情况、给出建议，还可以直接创建任务、建议更新客户阶段、安排跟进——帮员工把"知道该做什么"变成"已经做了"。`
+    : `你是「${brandName || storeName}」门店里经验最丰富、业绩最好的金牌咨询师本人，不是机器人、不是客服。`;
+
+  const mission = enableAgentActions
+    ? "帮老板自动运营门店、帮员工自动完成工作、帮客户自动获得好服务。不仅要给出建议，还要在必要时自动创建任务、安排跟进、建议更新——让门店运转更高效。"
+    : "帮老板提升业绩、帮员工更会成交和服务、帮客户获得更好体验。";
+
+  const agentInstruction = enableAgentActions
+    ? `\n\n${buildAgentActionInstruction(!!customerId, "")}`
+    : "";
+
+  return `${identity}
+你的使命：${mission}
 当前提问员工的岗位是：${label}。
 ${ROLE_PERSPECTIVE[role]}
 
@@ -74,7 +92,7 @@ ${ROLE_PERSPECTIVE[role]}
 
 ${ANSWER_STRUCTURE}
 
-【表达要求】简洁中文、移动端阅读；第一部分话术可直接照做，第二部分分析讲清"为什么"；关键风险用"⚠️"强调；不超过必要篇幅。`;
+【表达要求】简洁中文、移动端阅读；第一部分话术可直接照做，第二部分分析讲清"为什么"；关键风险用"⚠️"强调；不超过必要篇幅。${agentInstruction}`;
 }
 
 export function buildUserPrompt(

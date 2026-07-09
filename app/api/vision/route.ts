@@ -22,10 +22,10 @@ export async function POST(req: NextRequest) {
   const hint: string = body?.hint || "";
   if (!imageUrl) return NextResponse.json({ error: "缺少图片" }, { status: 400 });
 
-  let sessionId: string | null = body?.sessionId || null;
+  let sessionId: string = body?.sessionId || "";
   if (sessionId) {
     const s = await db.chat.getSession(sessionId, ctx.employee.id);
-    if (!s) sessionId = null;
+    if (!s) sessionId = "";
   }
   if (!sessionId) {
     const s = await db.chat.createSession({

@@ -9,21 +9,20 @@ export interface NavItem {
   icon: string;
 }
 
-// 原型 5 导航：首页 / 会谈 / 客户 / AI教练 / 我的（老板端）
+// 底部 5 导航：会谈 / 客户 / 首页(居中放大突出) / AI教练 / 我的
 export const MAIN_NAV: NavItem[] = [
-  { href: "/admin", label: "首页", icon: "⌂" },
   { href: "/meeting", label: "会谈", icon: "◉" },
   { href: "/customers", label: "客户", icon: "◎" },
+  { href: "/home", label: "首页", icon: "⌂" },
   { href: "/chat", label: "AI教练", icon: "✦" },
   { href: "/me", label: "我的", icon: "☰" },
 ];
 
-// 员工端：同样 5 导航，员工也能进客户机会池（/customers 按 data_scope 只看自己负责的）
-// 「任务」不放底部，收进首页/我的
+// 员工端：首页指向 /home，其余顺序一致
 export const STAFF_NAV: NavItem[] = [
-  { href: "/work", label: "首页", icon: "⌂" },
   { href: "/meeting", label: "会谈", icon: "◉" },
   { href: "/customers", label: "客户", icon: "◎" },
+  { href: "/home", label: "首页", icon: "⌂" },
   { href: "/chat", label: "AI教练", icon: "✦" },
   { href: "/me", label: "我的", icon: "☰" },
 ];
@@ -33,7 +32,7 @@ export const ADMIN_NAV = MAIN_NAV;
 
 export function BottomNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
-  const exact = ["/admin", "/chat", "/work"];
+  const exact = ["/home", "/chat"];
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md border-t border-[var(--line)] bg-white/95 px-2 backdrop-blur"
@@ -42,6 +41,7 @@ export function BottomNav({ items }: { items: NavItem[] }) {
       <ul className="flex py-1.5">
         {items.map((it) => {
           const active = exact.includes(it.href) ? pathname === it.href : pathname.startsWith(it.href);
+          const isHome = it.label === "首页";
           return (
             <li key={it.href} className="flex-1">
               <Link
@@ -50,9 +50,9 @@ export function BottomNav({ items }: { items: NavItem[] }) {
                   active
                     ? "bg-[var(--green-soft)] font-medium text-[var(--green-dark)]"
                     : "text-[var(--faint)]"
-                }`}
+                } ${isHome ? "relative -top-1" : ""}`}
               >
-                <span className="text-[17px] not-italic leading-none">{it.icon}</span>
+                <span className={`leading-none ${isHome ? "text-[21px]" : "text-[17px]"}`}>{it.icon}</span>
                 {it.label}
               </Link>
             </li>

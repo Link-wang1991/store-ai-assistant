@@ -41,9 +41,6 @@ function employeeList(row: any): DemoEmployee[] {
 
 async function getDemoAccounts(): Promise<DemoAccount[]> {
   const fallback = fallbackDemoAccounts();
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const supabaseService = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-  if (!supabaseUrl || !supabaseService || supabaseUrl.includes("/rest/v1")) return fallback;
 
   try {
     const rows = await db.startup.listDemoEmployees(demoAccountTemplates.map((account) => account.email));
@@ -92,30 +89,22 @@ async function getDemoAccounts(): Promise<DemoAccount[]> {
 }
 
 async function getStartupStatus(demoEmails: string[]) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  const supabaseService = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   const aiProvider = process.env.AI_PROVIDER || "mock";
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
 
+  // 检查后端是否在线
+  let backendOk = false;
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"}/api-docs`, { signal: AbortSignal.timeout(3000) });
+    backendOk = res.ok;
+  } catch {}
+
   const status = [
     {
-      label: "Supabase URL",
-      value: supabaseUrl ? "已配置" : "未配置",
-      ok: !!supabaseUrl && !supabaseUrl.includes("/rest/v1"),
-      hint: supabaseUrl.includes("/rest/v1") ? "URL 不应包含 /rest/v1" : "用于前端和服务端连接项目",
-    },
-    {
-      label: "Supabase Anon Key",
-      value: supabaseAnon ? "已配置" : "未配置",
-      ok: !!supabaseAnon,
-      hint: "可发布密钥，可以用于浏览器登录",
-    },
-    {
-      label: "Service Role Key",
-      value: supabaseService ? "已配置" : "未配置",
-      ok: !!supabaseService,
-      hint: "仅服务端使用，不能加 NEXT_PUBLIC_",
+      label: "后端 API",
+      value: backendOk ? "在线" : "离线",
+      ok: backendOk,
+      hint: backendOk ? "Spring Boot 后端正常运行" : "请执行 store-ai-server 启动步骤",
     },
     {
       label: "AI_PROVIDER",
@@ -149,10 +138,9 @@ async function getStartupStatus(demoEmails: string[]) {
     },
   ];
 
-  if (supabaseUrl && supabaseAnon && supabaseService && !supabaseUrl.includes("/rest/v1")) {
-    try {
-      const demo = await db.startup.getDemoStatus(demoEmails);
-      status.push(
+  try {
+    const demo = await db.startup.getDemoStatus(demoEmails) as any;
+    status.push(
         {
           label: "门店数据",
           value: demo.activeStoreCount > 0 ? `${demo.activeStoreCount} 个` : "未发现",
@@ -174,14 +162,6 @@ async function getStartupStatus(demoEmails: string[]) {
         hint: error?.message || "无法读取 Supabase，请检查 schema 和密钥",
       });
     }
-  } else {
-    status.push({
-      label: "数据库连通",
-      value: "未检测",
-      ok: false,
-      hint: "Supabase 三项配置完整后再检测门店与账号数据",
-    });
-  }
 
   return { demoMode, status };
 }

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { getAuthContext, createAccount } from "./auth";
 import { db } from "./db";
 import { storage } from "./storage";
-import { createSupabaseServer } from "./supabase/server";
+import { isBackendMode, API_BASE_URL } from "./data-source";
+import { submitTranscription, asrConfigured } from "./ai/asr";
 import { DEMO_ACCOUNT_TEMPLATES } from "./demo-accounts";
 import { PERMISSION_MODULES, KNOWLEDGE_CATEGORIES, isAdminRole } from "./constants";
 import { roleLabel } from "./roles";
@@ -24,25 +25,6 @@ export interface ActionResult {
   ok: boolean;
   message?: string;
   data?: any;
-}
-
-// 服务端登录：手机端只请求我们的应用，由 Vercel/本机服务端去连 Supabase。
-// 这比浏览器直连 Supabase 更适合移动端和国内网络环境。
-export async function loginWithPassword(email: string, password: string): Promise<ActionResult> {
-  const normalizedEmail = String(email || "").trim().toLowerCase();
-  const rawPassword = String(password || "");
-  if (!normalizedEmail || !rawPassword) return { ok: false, message: "请输入邮箱和密码" };
-  try {
-    const supabase = createSupabaseServer();
-    const { error } = await supabase.auth.signInWithPassword({
-      email: normalizedEmail,
-      password: rawPassword,
-    });
-    if (error) return { ok: false, message: error.message };
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, message: e?.message || "登录服务暂时不可用" };
-  }
 }
 
 // 修复中文文件名乱码：multipart 文件名常被按 latin1 解码（如「老客户」→「è€·å®¢」）。
@@ -1398,6 +1380,43 @@ export async function reanalyzeMeeting(meetingId: string): Promise<ActionResult>
   return { ok: true, message: "已重新分析" };
 }
 
+// 重新提交转写（针对卡在 transcribing 的会议）
+export async function retryMeetingTranscription(meetingId: string): Promise<ActionResult> {
+  const ctx = await getAuthContext();
+  if (!ctx) return { ok: false, message: "未登录" };
+  const m = await db.meetings.getById(meetingId, ctx.store.id);
+  if (!m) return { ok: false, message: "会谈不存在" };
+  const isMgr = ["owner", "manager"].includes(ctx.baseRole);
+  if (m.employee_id !== ctx.employee.id && !isMgr) return { ok: false, message: "无权限" };
+  if (!asrConfigured()) return { ok: false, message: "未配置语音转写（QWEN_API_KEY）" };
+
+  try {
+    let fileUrl: string | null = null;
+    if (isBackendMode()) {
+      // 旧会议 audio_url 可能为空（列缺失），但文件按约定路径存在
+      const ext = m.audio_url ? m.audio_url.split(".").pop() || "webm" : "webm";
+      fileUrl = `${API_BASE_URL}/api/meetings/${meetingId}/audio/meeting-${meetingId}.${ext}`;
+    } else {
+      if (!m.audio_url && !m.file_path) return { ok: false, message: "没有可用的录音文件" };
+      fileUrl = await storage.signedUrl(storage.MEETING_BUCKET, m.audio_url || m.file_path, 7200);
+    }
+    if (!fileUrl) return { ok: false, message: "无法获取录音访问链接" };
+
+    const taskId = await submitTranscription(fileUrl);
+    await db.meetings.update(meetingId, ctx.store.id, {
+      status: "transcribing",
+      analysis_status: "pending",
+      asr_task_id: taskId,
+      transcript_status: "pending",
+    });
+  } catch (e: any) {
+    await db.meetings.update(meetingId, ctx.store.id, { status: "failed" }).catch(() => {});
+    return { ok: false, message: e.message || "转写提交失败" };
+  }
+  revalidatePath(`/meeting/${meetingId}`);
+  return { ok: true, message: "已重新提交转写" };
+}
+
 // 首页快速归档风险（标记已处理；仍可在「风险记录 · 已处理」里检索到）
 export async function archiveRisk(id: string): Promise<ActionResult> {
   const ctx = await getAuthContext();
@@ -1491,7 +1510,7 @@ export async function transferCustomers(fromId: string, toId: string): Promise<A
   if (fromId === toId) return { ok: false, message: "不能转给同一个人" };
   let count = 0;
   try {
-    count = await db.customers.reassign(ctx.store.id, fromId, toId);
+    count = (await db.customers.reassign(ctx.store.id, fromId, toId)) || 0;
   } catch (e: any) {
     return { ok: false, message: e.message };
   }
@@ -1912,4 +1931,42 @@ export async function createFeedback(formData: FormData): Promise<ActionResult> 
   revalidatePath("/work");
   revalidatePath("/admin");
   return { ok: true, message: isRisk ? "已登记并升级给老板/店长" : "已记录客户反馈" };
+}
+
+// ============================================================
+// AI 回答反馈（闭环：员工说有用/没用）
+// ============================================================
+
+export async function submitAiFeedback(input: {
+  messageId: string;
+  isHelpful: boolean;
+  comment?: string;
+}): Promise<ActionResult> {
+  const ctx = await getAuthContext();
+  if (!ctx) return { ok: false, message: "未登录" };
+  try {
+    await db.aiFeedback.upsert({
+      store_id: ctx.store.id,
+      employee_id: ctx.employee.id,
+      message_id: input.messageId,
+      is_helpful: input.isHelpful,
+      comment: input.comment,
+    });
+    return { ok: true, message: input.isHelpful ? "已标记为有用" : "已标记为没用" };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
+}
+
+export async function getAiFeedbackStats(): Promise<
+  ActionResult & { stats?: { total: number; helpful: number; notHelpful: number; rate: number } }
+> {
+  const ctx = await getAuthContext();
+  if (!ctx) return { ok: false, message: "未登录" };
+  try {
+    const stats = await db.aiFeedback.getStats(ctx.store.id);
+    return { ok: true, message: "", stats };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
 }
