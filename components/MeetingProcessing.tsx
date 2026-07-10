@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { fetchWithRetry, readJson } from "@/lib/network/client-fetch";
 
 // 报告页在"转写中/分析中"时挂载它：继续轮询推进状态机，
@@ -41,7 +42,12 @@ export function MeetingProcessing({ id, initialStatus }: { id: string; initialSt
   return (
     <div className="flex flex-col items-center justify-center py-10 text-center">
       {error ? (
-        <p className="text-sm text-red-500">⚠️ {error}</p>
+        <div className="text-center">
+          <p className="text-sm text-red-500">⚠️ {error}</p>
+          {error.includes("有效语音") && (
+            <Link href="/meeting" className="mt-3 inline-block rounded-full bg-[var(--green)] px-4 py-1.5 text-[12px] font-medium text-white">去重新录音</Link>
+          )}
+        </div>
       ) : (
         <>
           <div className="mb-3 h-9 w-9 animate-spin rounded-full border-2 border-brand border-t-transparent" />

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { RoleSwitcher } from "@/components/RoleSwitcher";
+import { RecordingProvider } from "@/components/RecordingContext";
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "门店 AI 经营助手";
 
@@ -31,10 +32,12 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body>
-        <div className="mx-auto min-h-screen w-full max-w-md bg-white shadow-sm">
-          {children}
-        </div>
-        <RoleSwitcher />
+        <RecordingProvider>
+          <div className="mx-auto min-h-screen w-full max-w-md bg-white shadow-sm">
+            {children}
+          </div>
+          <RoleSwitcher />
+        </RecordingProvider>
       </body>
     </html>
   );

@@ -8,6 +8,7 @@ import { getToken } from "@/lib/api-client";
 import { MeetingProcessing } from "@/components/MeetingProcessing";
 import { ExperienceDistill, type ExperienceCandidate } from "@/components/ExperienceDistill";
 import { BottomNav, MAIN_NAV, STAFF_NAV } from "@/components/BottomNav";
+import { useRecording } from "@/components/RecordingContext";
 import { isAdminRole } from "@/lib/constants";
 import { SCENE_LABEL } from "@/lib/scenes";
 import { fmtTime } from "@/lib/format";
@@ -25,7 +26,7 @@ function clean(v: any): string {
   return v.replace(/\*\*/g, "").replace(/^#{1,6}\s*/gm, "").replace(/^\s*[-*]\s+/gm, "· ").trim();
 }
 
-function OverviewItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function OverviewItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3">
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--green-soft)] text-[var(--green)]">{icon}</div>
@@ -94,6 +95,15 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
   const [trans, setTrans] = useState<any[]>([]);
   const [employeeName, setEmployeeName] = useState("");
   const [retrying, setRetrying] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [allCustomers, setAllCustomers] = useState<any[]>([]);
+  const [savingCustomer, setSavingCustomer] = useState(false);
+  const [tab, setTab] = useState<"analysis" | "deep_review" | "distill" | "transcript">("analysis");
+  const { isRecording, isPaused, isStopping, timer, pauseRecording, resumeRecording, stopRecording, meetingId: recMeetingId } = useRecording();
+  const isCurrentRecording = isRecording && recMeetingId === params.id;
 
   useEffect(() => {
     const t = getToken();
@@ -186,48 +196,130 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
 
   return (
     <div className="min-h-screen bg-[var(--page)] pb-20">
-      {/* 顶部 */}
-      <div className="bg-[var(--green)] px-4 pb-4 pt-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/20 text-white font-bold text-[13px]">H</div>
-            <div>
-              <div className="text-[15px] font-semibold text-white">门店 AI Inbox</div>
-              <div className="text-[11px] text-white/70">咨询成交提效 · 护理/销售/回访</div>
-            </div>
-          </div>
+      {/* 顶部 - 粘性保持可见 */}
+      <div className="sticky top-0 z-30 bg-white border-b border-[var(--line)] px-4 py-3">
+        <div className="relative flex items-center justify-center">
+          <button onClick={() => router.push("/meeting")} className="absolute left-0 flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--ink)] text-[15px] font-bold hover:bg-[var(--line)] transition">←</button>
+          <span className="text-[15px] font-semibold text-[var(--ink)]">会谈详情</span>
         </div>
       </div>
 
-      {/* 绿色状态卡片 */}
-      <div className="mx-4 -mt-2 rounded-2xl bg-[var(--green)] p-4 text-white shadow-lg shadow-emerald-900/10">
-        <div className="text-center">
-          <div className="text-[16px] font-semibold">
-            {customerName} · {sceneName}
-          </div>
-          <div className="mt-1 text-[12px] text-white/70">
-            {m.status === "done" ? "AI 已对本次会谈进行复盘分析" : STATUS_LABEL[m.status] || m.status}
-          </div>
-        </div>
-        {m.status === "done" && (
-          <div className="mt-3 flex justify-center">
-            {trans.length > 0 && (
-              <Link href="#transcript" className="rounded-full bg-white px-4 py-1.5 text-[12px] font-medium text-[var(--green)] shadow-sm transition active:scale-95">
-                查看完整会谈记录
-              </Link>
+      {/* 录音横幅 + Tab 切换 — 同一 sticky 容器 */}
+      <div className="sticky top-[52px] z-20">
+      {isCurrentRecording && (
+        <div className="border-b border-[var(--green)] bg-[var(--green-soft)] px-4 py-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--green)]" />
+              <span className="font-mono text-[18px] font-bold text-[var(--ink)]">{timer}</span>
+              <span className="text-[12px] text-[var(--faint)]">{isStopping ? "上传中…" : isPaused ? "已暂停" : "录音中"}</span>
+            </div>
+            {!isStopping && (
+              <div className="flex items-center gap-2">
+                <button onClick={() => { isPaused ? resumeRecording() : pauseRecording(); }} className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[var(--yellow)] shadow-sm active:scale-90 transition">
+                  {isPaused ? (
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                  )}
+                </button>
+                <button onClick={() => { if (!isStopping) stopRecording(); }} className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white shadow-sm active:scale-90 transition">
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                </button>
+              </div>
             )}
           </div>
-        )}
+        </div>
+      )}
+      <div className="flex border-b border-[var(--line)] bg-white">
+        {(["analysis", "deep_review", "distill", "transcript"] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} className={`flex-1 py-2.5 text-center text-[13px] font-medium border-b-2 transition ${tab === t ? "border-[var(--green)] text-[var(--ink)]" : "border-transparent text-[var(--faint)]"}`}>
+            {t === "analysis" ? "分析概览" : t === "deep_review" ? "深度复盘" : t === "distill" ? "沉淀经验" : "对话记录"}
+          </button>
+        ))}
+      </div>
       </div>
 
-      {/* 概览 */}
+      {/* 分析概览 Tab */}
+      {tab === "analysis" && (<>
       <div className="mx-4 mt-4">
-        <h2 className="mb-2 text-[15px] font-semibold text-[var(--ink)]">本次会谈概览</h2>
         <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
           <div className="grid grid-cols-2 gap-4">
             <OverviewItem icon={<Icon name="clock" className="h-4 w-4" />} label="会谈时长" value={durationStr} />
             <OverviewItem icon={<Icon name="check" className="h-4 w-4" />} label="会谈时间" value={fmtTime(m.created_at)} />
-            <OverviewItem icon={<Icon name="user" className="h-4 w-4" />} label="客户" value={customerName} />
+            <div className="relative">
+              <OverviewItem
+                icon={<Icon name="user" className="h-4 w-4" />}
+                label="客户"
+                value={
+                  <button onClick={() => {
+                    setEditName(customerName);
+                    setEditPhone(m.customer_records?.phone || "");
+                    setEditingCustomer(true);
+                    fetch(`${API_BASE_URL}/api/customers`, { headers: { Authorization: `Bearer ${getToken()}` } })
+                      .then(r => r.json()).then(j => { if (j.code === 200) setAllCustomers(j.data || []); }).catch(() => {});
+                  }} className="text-left underline decoration-dotted underline-offset-2 hover:text-[var(--green)] transition">
+                    {customerName}
+                  </button>
+                }
+              />
+              <span className="text-[10px] text-[var(--faint)]">点击可编辑或绑定已有客户</span>
+              {editingCustomer && (
+                <div className="absolute left-0 top-full z-10 mt-2 w-80 rounded-2xl border border-[var(--line)] bg-white p-4 shadow-xl">
+                  <h3 className="mb-3 text-[13px] font-semibold text-[var(--ink)]">编辑客户信息</h3>
+                  <div className="space-y-2.5">
+                    <input value={editName} onChange={e => setEditName(e.target.value)}
+                      placeholder="客户姓名" className="w-full rounded-xl border border-[var(--line)] px-3 py-2 text-[13px] outline-none focus:border-[var(--green)]" />
+                    <input value={editPhone} onChange={e => setEditPhone(e.target.value)}
+                      placeholder="手机号" className="w-full rounded-xl border border-[var(--line)] px-3 py-2 text-[13px] outline-none focus:border-[var(--green)]" />
+
+                    <div className="border-t border-[var(--line)] pt-2">
+                      <p className="mb-1 text-[11px] text-[var(--faint)]">或关联已有客户：</p>
+                      <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)}
+                        placeholder="搜索客户…" className="w-full rounded-xl border border-[var(--line)] px-3 py-2 text-[12px] outline-none focus:border-[var(--green)]" />
+                      <div className="mt-1 max-h-32 space-y-0.5 overflow-y-auto">
+                        {allCustomers
+                          .filter((c: any) => !customerSearch || c.name?.includes(customerSearch) || c.phone?.includes(customerSearch))
+                          .slice(0, 6).map((c: any) => (
+                            <button key={c.id} onClick={async () => {
+                              setSavingCustomer(true);
+                              try {
+                                await fetch(`${API_BASE_URL}/api/meetings/${params.id}`, {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+                                  body: JSON.stringify({ customer_id: c.id }),
+                                });
+                                setEditingCustomer(false);
+                                window.location.reload();
+                              } finally { setSavingCustomer(false); }
+                            }} className="w-full rounded-lg px-2.5 py-1.5 text-left text-[12px] hover:bg-[var(--surface-2)] transition">
+                              {c.name}{c.phone ? ` · ${c.phone}` : ""}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-1">
+                      <button onClick={() => setEditingCustomer(false)} disabled={savingCustomer}
+                        className="flex-1 rounded-full border border-[var(--line)] py-2 text-[12px] text-[var(--muted)] disabled:opacity-50">取消</button>
+                      <button onClick={async () => {
+                        setSavingCustomer(true);
+                        try {
+                          await fetch(`${API_BASE_URL}/api/customers/${m.customer_id}/update`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+                            body: JSON.stringify({ name: editName, phone: editPhone }),
+                          });
+                          setEditingCustomer(false);
+                          window.location.reload();
+                        } finally { setSavingCustomer(false); }
+                      }} disabled={savingCustomer}
+                        className="flex-1 rounded-full bg-[var(--green)] py-2 text-[12px] font-medium text-white disabled:opacity-50">{savingCustomer ? "保存中…" : "保存"}</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             <OverviewItem icon={<Icon name="user" className="h-4 w-4" />} label="参与员工" value={m.employee_name || employeeName || "--"} />
           </div>
         </div>
@@ -239,7 +331,7 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
           m.status === "transcribing" || m.status === "analyzing" ? (
             <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
               <MeetingProcessing id={params.id} initialStatus={m.status} />
-              {m.status === "transcribing" && (
+              {m.status === "transcribing" && !m.asr_task_id && (
                 <div className="mt-4 border-t border-[var(--line)] pt-3 text-center">
                   <button
                     onClick={handleRetryTranscription}
@@ -254,10 +346,19 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
             </div>
           ) : (
             <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
-              <p className="text-sm text-[var(--muted)]">
-                当前状态：{STATUS_LABEL[m.status] || m.status}。
-                {m.status === "failed" ? "分析失败了，转写内容可在下方查看。" : m.status === "recording" ? "这次录音未完成上传。" : "稍后刷新查看。"}
-              </p>
+              <div className="text-sm text-[var(--muted)]">
+                <p>当前状态：{STATUS_LABEL[m.status] || m.status}。</p>
+                {m.status === "failed" ? (
+                  <>
+                    <p className="mt-1">转写未能识别到有效语音，建议重新录制一段。</p>
+                    <Link href="/meeting" className="mt-2 inline-block rounded-full bg-[var(--green)] px-4 py-1.5 text-[12px] font-medium text-white">去重新录音</Link>
+                  </>
+                ) : m.status === "recording" ? (
+                  isCurrentRecording ? <p>录音进行中，上方可暂停或结束。</p> : <p>这次录音未完成上传。</p>
+                ) : (
+                  <p>稍后刷新查看。</p>
+                )}
+              </div>
             </div>
           )
         ) : !hasAnalysis ? (
@@ -275,15 +376,6 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
               <AnalysisCard icon={<Icon name="shield" className="h-4 w-4" />} title="合规风险" content={analysis.compliance_risks} accent="red" />
             </div>
 
-            {/* 深度复盘 */}
-            {(analysis.emotional_needs || analysis.employee_to_improve) && (
-              <div className="mt-3 rounded-2xl border border-[var(--line)] bg-white p-4">
-                <div className="mb-2 text-[14px] font-semibold text-[var(--ink)]">深度复盘</div>
-                {analysis.emotional_needs && <div className="mb-2"><div className="text-[11px] text-[var(--faint)]">情绪 / 深层需求</div><div className="text-[13px] leading-relaxed text-[var(--muted)]">{clean(analysis.emotional_needs)}</div></div>}
-                {analysis.employee_to_improve && <div><div className="text-[11px] text-[var(--faint)]">不到位 / 后续要规避的</div><div className="text-[13px] leading-relaxed text-[var(--muted)]">{clean(analysis.employee_to_improve)}</div></div>}
-              </div>
-            )}
-
             {/* 下一步跟进 */}
             {(analysis.followup_goal || analysis.suggested_script) && (
               <div className="mt-3 rounded-2xl border border-[var(--green)]/20 bg-[var(--green-soft)]/40 p-4">
@@ -292,15 +384,38 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
                 {analysis.suggested_script && <div><div className="text-[11px] text-[var(--faint)]">建议话术</div><div className="rounded-xl bg-white p-3 mt-1 text-[13px] leading-relaxed text-[var(--ink)]">{clean(analysis.suggested_script)}</div></div>}
               </div>
             )}
-
-            {/* 可沉淀经验 */}
-            <ExperienceDistill candidates={distill} />
           </>
         )}
       </div>
+      </>)}
 
-      {/* 完整录音翻译：只要有转写内容就展示（不论状态） */}
-      {trans.length > 0 && (<section id="transcript" className="mx-4 mt-4">
+      {/* 深度复盘 Tab */}
+      {tab === "deep_review" && m.status === "done" && hasAnalysis && (
+      <div className="mx-4 mt-4">
+        {(analysis.emotional_needs || analysis.employee_to_improve) ? (
+          <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
+            <div className="mb-3 text-[14px] font-semibold text-[var(--ink)]">深度复盘</div>
+            {analysis.emotional_needs && <div className="mb-3"><div className="text-[11px] text-[var(--faint)]">情绪 / 深层需求</div><div className="text-[13px] leading-relaxed text-[var(--muted)]">{clean(analysis.emotional_needs)}</div></div>}
+            {analysis.employee_to_improve && <div><div className="text-[11px] text-[var(--faint)]">不到位 / 后续要规避的</div><div className="text-[13px] leading-relaxed text-[var(--muted)]">{clean(analysis.employee_to_improve)}</div></div>}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
+            <p className="text-sm text-[var(--faint)]">暂无深度复盘内容</p>
+          </div>
+        )}
+      </div>
+      )}
+
+      {/* 沉淀经验 Tab */}
+      {tab === "distill" && m.status === "done" && (
+      <div className="mx-4 mt-4">
+        <ExperienceDistill candidates={distill} />
+      </div>
+      )}
+
+      {/* 记录详情 Tab */}
+      {tab === "transcript" && (<>
+      {trans.length > 0 ? (<section id="transcript" className="mx-4 mt-4">
           <h2 className="mb-2 text-[15px] font-semibold text-[var(--ink)]">录音转写（完整对话）</h2>
           <div className="space-y-2">
             {trans.map((t: any) => (
@@ -313,12 +428,11 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
             ))}
           </div>
         </section>
-      )}
-
-      {/* 操作栏 */}
-      <div className="mx-4 mt-4 mb-4 flex items-center justify-between">
-        <Link href="/meeting" className="text-[12px] text-[var(--green)] font-medium">← 返回会谈列表</Link>
-      </div>
+      ) : (
+        <div className="mx-4 mt-4 rounded-2xl border border-dashed border-[var(--line)] bg-white p-6 text-center">
+          <p className="text-[13px] text-[var(--faint)]">暂无转写记录</p>
+        </div>
+      )}</>)}
 
       <BottomNav items={nav} />
     </div>
