@@ -55,7 +55,12 @@ export default function Home() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    const token = getToken();
+    // 优先 localStorage，其次 cookie（cookie 已由服务端 /api/login 写入）
+    let token = localStorage.getItem("store_ai_token");
+    if (!token && typeof document !== "undefined") {
+      const m = document.cookie.match(/(?:^|;\s*)store_ai_token=([^;]*)/);
+      if (m) token = m[1];
+    }
     if (!token) {
       setChecking(false);
       return;

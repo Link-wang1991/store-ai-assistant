@@ -11,6 +11,7 @@ import { isAdminRole } from "@/lib/constants";
 import { MAIN_NAV } from "@/components/BottomNav";
 import { SCENE_LABEL } from "@/lib/scenes";
 import { fmtTime } from "@/lib/format";
+import { decodeJwtPayload } from "@/lib/jwt";
 
 const STATUS_LABEL: Record<string, string> = {
   recording: "录音中", uploaded: "已上传", transcribing: "转写中", analyzing: "分析中", done: "已完成", failed: "失败",
@@ -35,16 +36,13 @@ export default function MeetingPage() {
     if (!t) { router.replace("/login"); return; }
 
     let eid = "", ename = "";
-    try {
-      const raw = t.split(".")[1];
-      const utf8 = decodeURIComponent(escape(atob(raw)));
-      const p = JSON.parse(utf8);
-      setRole(p.role || "");
-      eid = p.employeeId || "";
-      ename = p.name || "";
-      setEmpId(eid);
-      setEmpName(ename);
-    } catch { router.replace("/login"); return; }
+    const p = decodeJwtPayload(t);
+    if (!p) { router.replace("/login"); return; }
+    setRole(p.role || "");
+    eid = p.employeeId || "";
+    ename = p.name || "";
+    setEmpId(eid);
+    setEmpName(ename);
 
     const now = Date.now();
     Promise.allSettled([
@@ -199,7 +197,15 @@ export default function MeetingPage() {
                     }`}>
                       {STATUS_LABEL[m.status] || m.status}
                     </span>
+                    {m.status === "done" && typeof (m.quality_score ?? m.qualityScore) === "number" && (
+                      <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--ink)]">
+                        ★ {m.quality_score ?? m.qualityScore}
+                      </span>
+                    )}
                   </div>
+                  {m.status === "failed" && m.fail_reason && (
+                    <p className="mt-1.5 text-[11px] text-[var(--red)] leading-relaxed">{m.fail_reason}</p>
+                  )}
                   <div className="mt-1.5 flex items-center gap-2 text-[11px] text-[var(--faint)]">
                     <span>{fmtTime(m.created_at)}</span>
                     {empName && <span>· {empName}</span>}

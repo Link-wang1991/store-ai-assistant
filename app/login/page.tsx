@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { authApi, setToken } from "@/lib/api-client";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -14,13 +13,19 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await authApi.login(email, password);
-      if (!result.ok || !result.data) {
-        setError("登录失败：" + (result.error || "请检查账号密码"));
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const result = await res.json();
+      if (result.code !== 200 || !result.data?.token) {
+        setError("登录失败：" + (result.message || "请检查账号密码"));
         return;
       }
-      setToken(result.data.token);
-      window.location.href = "/home";
+      // cookie 已由服务端设置，localStorage 存一份给 getToken() 用
+      localStorage.setItem("store_ai_token", result.data.token);
+      window.location.href = "/";
     } catch {
       setError("网络不稳定，登录没有完成。请再点一次登录。");
     } finally {

@@ -23,7 +23,7 @@ export async function getApiAuth(): Promise<ApiAuthContext | null> {
     if (!token) return null;
 
     // JWT 格式: header.payload.signature
-    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString());
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
 
     if (!payload.storeId || !payload.employeeId) return null;
 

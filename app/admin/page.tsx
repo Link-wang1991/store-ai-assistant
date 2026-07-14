@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getToken } from "@/lib/api-client";
+import { decodeJwtPayload } from "@/lib/jwt";
 
 const ADMIN_ICONS: Record<string, React.ReactNode> = {
   customers: (
@@ -90,11 +91,10 @@ export default function AdminPage() {
   useEffect(() => {
     const t = getToken();
     if (!t) { router.replace("/login"); return; }
-    try {
-      const p = JSON.parse(atob(t.split(".")[1]));
-      const r = p.role || "";
-      if (r !== "owner" && r !== "manager") { router.replace("/home"); return; }
-    } catch { router.replace("/login"); return; }
+    const p = decodeJwtPayload(t);
+    if (!p) { router.replace("/login"); return; }
+    const r = p.role || "";
+    if (r !== "owner" && r !== "manager") { router.replace("/home"); return; }
     setLoading(false);
   }, [router]);
 

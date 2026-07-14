@@ -13,6 +13,7 @@ import { isAdminRole } from "@/lib/constants";
 import { SCENE_LABEL } from "@/lib/scenes";
 import { fmtTime } from "@/lib/format";
 import { retryMeetingTranscription } from "@/lib/actions";
+import { decodeJwtPayload } from "@/lib/jwt";
 
 const STATUS_LABEL: Record<string, string> = {
   recording: "录音中", uploaded: "已上传待处理", transcribing: "转写中", analyzing: "AI 分析中", done: "已完成", failed: "处理失败",
@@ -38,8 +39,9 @@ function OverviewItem({ icon, label, value }: { icon: React.ReactNode; label: st
   );
 }
 
-function AnalysisCard({ icon, title, content, accent = "green" }: { icon: React.ReactNode; title: string; content: string | null; accent?: string }) {
-  if (!content) return null;
+function AnalysisCard({ icon, title, content, accent = "green" }: { icon: React.ReactNode; title: string; content: string | null | any[]; accent?: string }) {
+  // [] 空数组也视为无数据
+  if (!content || (Array.isArray(content) && content.length === 0)) return null;
   const accentMap: Record<string, { bg: string; text: string; border: string }> = {
     green: { bg: "bg-[var(--green-soft)]", text: "text-[var(--green)]", border: "border-emerald-100" },
     yellow: { bg: "bg-[var(--yellow-soft)]", text: "text-[var(--yellow)]", border: "border-amber-100" },
@@ -54,6 +56,39 @@ function AnalysisCard({ icon, title, content, accent = "green" }: { icon: React.
         <span className="text-[13px] font-semibold text-[var(--ink)]">{title}</span>
       </div>
       <p className="text-[12px] leading-relaxed text-[var(--muted)]">{clean(content)}</p>
+    </div>
+  );
+}
+
+function scoreColor(v: number): string {
+  if (v >= 80) return "var(--green)";
+  if (v >= 60) return "var(--yellow)";
+  return "var(--red)";
+}
+
+function QualityScoreCard({ score, dims }: { score: number; dims: { label: string; value: number }[] }) {
+  return (
+    <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
+      <div className="flex items-center gap-4">
+        <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-full border-2"
+          style={{ borderColor: scoreColor(score) }}>
+          <span className="text-[22px] font-bold leading-none" style={{ color: scoreColor(score) }}>{score}</span>
+          <span className="text-[9px] text-[var(--faint)] mt-0.5">综合分</span>
+        </div>
+        <div className="flex-1 space-y-1.5">
+          {dims.map((d) => (
+            <div key={d.label}>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-[var(--muted)]">{d.label}</span>
+                <span className="font-medium" style={{ color: scoreColor(d.value) }}>{d.value}</span>
+              </div>
+              <div className="mt-0.5 h-1.5 w-full rounded-full bg-[var(--surface-2)]">
+                <div className="h-1.5 rounded-full" style={{ width: `${d.value}%`, backgroundColor: scoreColor(d.value) }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -109,16 +144,12 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
     const t = getToken();
     if (!t) { router.replace("/login"); return; }
 
-    let r = "";
-    try {
-      const raw = t.split(".")[1];
-      const utf8 = decodeURIComponent(escape(atob(raw)));
-      const p = JSON.parse(utf8);
-      r = p.role || "";
-      setRole(r);
-      setIsAdmin(isAdminRole(r));
-      setEmployeeName(p.name || "");
-    } catch { router.replace("/login"); return; }
+    const p = decodeJwtPayload(t);
+    if (!p) { router.replace("/login"); return; }
+    const r = p.role || "";
+    setRole(r);
+    setIsAdmin(isAdminRole(r));
+    setEmployeeName(p.name || "");
 
     const bid = params.id;
     Promise.allSettled([
@@ -374,6 +405,19 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
               <AnalysisCard icon={<Icon name="star" className="h-4 w-4" />} title="员工亮点" content={analysis.employee_did_well} accent="green" />
               <AnalysisCard icon={<Icon name="target" className="h-4 w-4" />} title="错失机会" content={analysis.missed_opportunities} accent="yellow" />
               <AnalysisCard icon={<Icon name="shield" className="h-4 w-4" />} title="合规风险" content={analysis.compliance_risks} accent="red" />
+            </div>
+
+            {/* 量化评分 */}
+            <div className="mt-3">
+              <QualityScoreCard
+                score={Number(analysis.quality_score ?? 60)}
+                dims={[
+                  { label: "需求挖掘", value: Number(analysis.need_digging_score ?? 60) },
+                  { label: "成交推进", value: Number(analysis.deal_advancing_score ?? 60) },
+                  { label: "合规表现", value: Number(analysis.compliance_score ?? 60) },
+                  { label: "服务体验", value: Number(analysis.service_score ?? 60) },
+                ]}
+              />
             </div>
 
             {/* 下一步跟进 */}

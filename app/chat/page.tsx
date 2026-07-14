@@ -6,6 +6,7 @@ import { getToken, customerApi } from "@/lib/api-client";
 import { QUICK_QUESTIONS, type Role } from "@/lib/constants";
 import { ChatClient } from "@/components/ChatClient";
 import { CoachLanding } from "@/components/CoachLanding";
+import { decodeJwtPayload } from "@/lib/jwt";
 
 function ChatPageInner() {
   const router = useRouter();
@@ -29,7 +30,7 @@ function ChatPageInner() {
     if (!t) { router.replace("/login"); return; }
     setToken(t);
     try {
-      setPayload(JSON.parse(atob(t.split(".")[1])));
+      setPayload(decodeJwtPayload(t));
     } catch {}
     setLoading(false);
   }, [router]);

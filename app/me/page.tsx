@@ -6,6 +6,7 @@ import Link from "next/link";
 import { getToken } from "@/lib/api-client";
 import { LogoutButton } from "@/components/LogoutButton";
 import { BottomNav, MAIN_NAV, STAFF_NAV } from "@/components/BottomNav";
+import { decodeJwtPayload } from "@/lib/jwt";
 
 export default function MePage() {
   const router = useRouter();
@@ -17,12 +18,11 @@ export default function MePage() {
   useEffect(() => {
     const t = getToken();
     if (!t) { router.replace("/login"); return; }
-    try {
-      const p = JSON.parse(atob(t.split(".")[1]));
-      setRole(p.role || "");
-      setStoreId(p.storeId || "");
-      setName(p.role === "owner" ? "老板" : p.role === "manager" ? "店长" : p.role === "consultant" ? "咨询师" : p.role === "beautician" ? "美容师" : p.role === "receptionist" ? "前台" : p.role === "operator" ? "运营" : "");
-    } catch { router.replace("/login"); return; }
+    const p = decodeJwtPayload(t);
+    if (!p) { router.replace("/login"); return; }
+    setRole(p.role || "");
+    setStoreId(p.storeId || "");
+    setName(p.role === "owner" ? "老板" : p.role === "manager" ? "店长" : p.role === "consultant" ? "咨询师" : p.role === "beautician" ? "美容师" : p.role === "receptionist" ? "前台" : p.role === "operator" ? "运营" : "");
     setLoading(false);
   }, [router]);
 

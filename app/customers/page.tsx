@@ -8,6 +8,7 @@ import { isAdminRole } from "@/lib/constants";
 import { getToken } from "@/lib/api-client";
 import { API_BASE_URL } from "@/lib/data-source";
 import { fmtDate } from "@/lib/format";
+import { decodeJwtPayload } from "@/lib/jwt";
 
 const TABS = [
   { key: "all", label: "全部" },
@@ -31,13 +32,10 @@ export default function CustomersPage() {
     if (!t) { router.replace("/login"); return; }
 
     let employeeId = "";
-    try {
-      const raw = t.split(".")[1];
-      const utf8 = decodeURIComponent(escape(atob(raw)));
-      const p = JSON.parse(utf8);
-      setRole(p.role || "");
-      employeeId = p.employeeId || "";
-    } catch { router.replace("/login"); return; }
+    const p = decodeJwtPayload(t);
+    if (!p) { router.replace("/login"); return; }
+    setRole(p.role || "");
+    employeeId = p.employeeId || "";
 
     if (!employeeId) { setLoading(false); return; }
 

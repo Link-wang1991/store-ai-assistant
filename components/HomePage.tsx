@@ -9,6 +9,7 @@ import { STAGE_LABEL } from "@/lib/opportunity";
 import { fmtDate } from "@/lib/format";
 import { WorkCard } from "@/components/WorkCard";
 import { BottomNav, type NavItem } from "@/components/BottomNav";
+import { decodeJwtPayload } from "@/lib/jwt";
 
 const TABS = [
   { key: "tasks", label: "今日重点" },
@@ -73,16 +74,9 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
       router.replace("/login");
       return;
     }
-    try {
-      const raw = t.split(".")[1];
-      const utf8 = decodeURIComponent(escape(atob(raw)));
-      const p = JSON.parse(utf8);
-      const r = p.role || "";
-      setRole(r);
-    } catch {
-      router.replace("/login");
-      return;
-    }
+    const payload = decodeJwtPayload(t);
+    if (!payload) { router.replace("/login"); return; }
+    setRole(payload.role || "");
 
     Promise.allSettled([customerApi.list(), taskApi.list(), meetingApi.countUnanalyzed()]).then(([cr, tr, mr]) => {
       if (cr.status === "fulfilled" && cr.value.ok) {

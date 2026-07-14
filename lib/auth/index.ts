@@ -46,7 +46,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     const token = await getServerToken();
     if (!token) return null;
     const payload = JSON.parse(
-      Buffer.from(token.split(".")[1], "base64").toString(),
+      Buffer.from(token.split(".")[1], "base64url").toString(),
     );
     if (!payload.sub) return null;
     return loadFullContext(payload.sub);
