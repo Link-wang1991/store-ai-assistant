@@ -30,15 +30,18 @@ export const STAFF_NAV: NavItem[] = [
 // 兼容旧引用
 export const ADMIN_NAV = MAIN_NAV;
 
-export function BottomNav({ items }: { items: NavItem[] }) {
+export function BottomNav({ items, variant = "default" }: { items: NavItem[]; variant?: "default" | "home" }) {
   const pathname = usePathname();
   const exact = ["/home", "/chat"];
+  const homeVariant = variant === "home";
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md border-t border-[var(--line)] bg-white/95 px-2 backdrop-blur"
+      className={homeVariant
+        ? "home-bottom-navigation fixed inset-x-0 bottom-0 z-20 mx-auto max-w-[430px]"
+        : "fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md border-t border-[var(--line)] bg-white/95 px-2 backdrop-blur"}
       style={{ paddingBottom: "var(--safe-bottom)" }}
     >
-      <ul className="flex py-1.5">
+      <ul className={homeVariant ? "flex px-2 py-2" : "flex py-1.5"}>
         {items.map((it) => {
           const active = exact.includes(it.href) ? pathname === it.href : pathname.startsWith(it.href);
           const isHome = it.label === "首页";
@@ -46,13 +49,18 @@ export function BottomNav({ items }: { items: NavItem[] }) {
             <li key={it.href} className="flex-1">
               <Link
                 href={it.href}
-                className={`mx-0.5 flex flex-col items-center gap-1 rounded-xl py-2 text-[11px] transition ${
+                aria-current={active ? "page" : undefined}
+                className={`${homeVariant ? "home-bottom-nav-item" : "mx-0.5 flex flex-col items-center gap-1 rounded-xl py-2 text-[11px] transition"} ${
                   active
-                    ? "bg-[var(--green-soft)] font-medium text-[var(--green-dark)]"
-                    : "text-[var(--faint)]"
-                } ${isHome ? "relative -top-1" : ""}`}
+                    ? homeVariant ? "active" : "bg-[var(--green-soft)] font-medium text-[var(--green-dark)]"
+                    : homeVariant ? "" : "text-[var(--faint)]"
+                } ${!homeVariant && isHome ? "relative -top-1" : ""}`}
               >
-                <span className={`leading-none ${isHome ? "text-[21px]" : "text-[17px]"}`}>{it.icon}</span>
+                {homeVariant ? (
+                  <NavLineIcon href={it.href} active={active} />
+                ) : (
+                  <span className={`leading-none ${isHome ? "text-[21px]" : "text-[17px]"}`}>{it.icon}</span>
+                )}
                 {it.label}
               </Link>
             </li>
@@ -60,5 +68,55 @@ export function BottomNav({ items }: { items: NavItem[] }) {
         })}
       </ul>
     </nav>
+  );
+}
+
+function NavLineIcon({ href, active }: { href: string; active: boolean }) {
+  const common = {
+    className: "h-[21px] w-[21px]",
+    fill: active && href === "/home" ? "currentColor" : "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+
+  if (href === "/home") {
+    return (
+      <svg viewBox="0 0 24 24" {...common}>
+        <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10Z" />
+      </svg>
+    );
+  }
+  if (href.startsWith("/meeting")) {
+    return (
+      <svg viewBox="0 0 24 24" {...common}>
+        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3v-7a9 9 0 1 1 18 0Z" />
+      </svg>
+    );
+  }
+  if (href.startsWith("/customers")) {
+    return (
+      <svg viewBox="0 0 24 24" {...common}>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
+      </svg>
+    );
+  }
+  if (href === "/chat") {
+    return (
+      <svg viewBox="0 0 24 24" {...common}>
+        <circle cx="12" cy="12" r="8" />
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+        <circle cx="12" cy="12" r="2.5" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" {...common}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 10h.01M15.5 10h.01M8.5 15a5 5 0 0 0 7 0" />
+    </svg>
   );
 }

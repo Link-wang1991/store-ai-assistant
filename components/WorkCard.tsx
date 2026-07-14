@@ -4,42 +4,30 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { poolInsight, type PoolCustomer } from "@/lib/customer-pools";
 
-const POOL_STYLE: Record<string, { label: string; bar: string; avatar: string; tag: string }> = {
+const POOL_STYLE: Record<string, { label: string; tone: string }> = {
   today: {
     label: "今日到店",
-    bar: "bg-[var(--green)]",
-    avatar: "bg-[var(--green-soft)] text-[var(--green-dark)]",
-    tag: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    tone: "green",
   },
   new: {
     label: "新客转化",
-    bar: "bg-sky-500",
-    avatar: "bg-sky-50 text-sky-700",
-    tag: "bg-sky-50 text-sky-700 border-sky-100",
+    tone: "blue",
   },
   new_deal: {
     label: "新成交",
-    bar: "bg-teal-500",
-    avatar: "bg-teal-50 text-teal-700",
-    tag: "bg-teal-50 text-teal-700 border-teal-100",
+    tone: "orange",
   },
   regular: {
     label: "老客维护",
-    bar: "bg-slate-300",
-    avatar: "bg-slate-100 text-slate-600",
-    tag: "bg-slate-100 text-slate-600 border-slate-200",
+    tone: "slate",
   },
   dormant: {
     label: "复购停滞",
-    bar: "bg-amber-400",
-    avatar: "bg-amber-50 text-amber-700",
-    tag: "bg-amber-50 text-amber-700 border-amber-100",
+    tone: "orange",
   },
   risk: {
     label: "服务风险",
-    bar: "bg-red-500",
-    avatar: "bg-red-50 text-red-700",
-    tag: "bg-red-50 text-red-700 border-red-100",
+    tone: "red",
   },
 };
 
@@ -59,82 +47,55 @@ export function WorkCard({ c }: { c: PoolCustomer }) {
   return (
     <div
       onClick={goProfile}
-      className="relative cursor-pointer overflow-hidden rounded-2xl border border-[var(--line)] bg-white transition active:bg-slate-50"
+      className={`home-work-card home-work-card-${style.tone}`}
     >
-      {/* 左侧色条 */}
-      <div className={`absolute left-0 top-0 bottom-0 w-1 ${style.bar}`} />
-
-      <div className="p-4 pl-5">
-        {/* 头部：头像 + 姓名 + 标签 */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-3">
-            <span
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${style.avatar}`}
-            >
+      <div className="home-work-card-body">
+        <div className="flex items-start gap-3">
+          <span className="home-work-avatar">
               {c.name.slice(0, 1)}
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate text-[16px] font-semibold text-slate-900">{c.name}</span>
-              <span className="block truncate text-[11px] text-[var(--faint)]">{c.stageLabel}</span>
-            </span>
-          </div>
-          <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${style.tag}`}>
-            {style.label}
           </span>
-        </div>
-
-        {/* 关键信息网格 */}
-        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12px]">
-          <div className="truncate">
-            <span className="text-[var(--faint)]">当前阶段</span>
-            <span className="ml-1.5 font-medium text-slate-700">{c.stageLabel}</span>
-          </div>
-          <div className="truncate">
-            <span className="text-[var(--faint)]">上次到店</span>
-            <span className="ml-1.5 font-medium text-slate-700">{c.lastVisitDate || "-"}</span>
-          </div>
-          <div className="truncate">
-            <span className="text-[var(--faint)]">上次互动</span>
-            <span className="ml-1.5 font-medium text-slate-700">{c.lastActive}</span>
-          </div>
-          <div className="truncate">
-            <span className="text-[var(--faint)]">AI判断</span>
-            <span className="ml-1.5 font-medium text-slate-700">{ins.aiJudge}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <h3 className="truncate text-[15px] font-semibold text-[#111827]">{c.name}</h3>
+                <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-[#7b8492]">
+                  {c.stageLabel} · {ins.aiJudge}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <span className="text-[11px] text-[#98a2b3]">{c.nextFollowLabel || "尽快跟进"}</span>
+                <span className="home-work-tag">{style.label}</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* AI 建议 */}
-        <div className="mt-3 text-[12px] text-slate-700">
-          <span className="font-semibold text-[var(--green-dark)]">AI建议：</span>
-          {ins.nextAction}
+        <div className="home-work-suggestion">
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <path d="m12 3 1.25 3.75L17 8l-3.75 1.25L12 13l-1.25-3.75L7 8l3.75-1.25L12 3Z" />
+            <path d="m18.5 14 .75 2.25L21.5 17l-2.25.75L18.5 20l-.75-2.25L15.5 17l2.25-.75L18.5 14Z" />
+          </svg>
+          <p className="line-clamp-2"><span className="font-medium">建议：</span>{ins.nextAction}</p>
         </div>
 
-        {/* 推荐话术 */}
-        <div className="mt-2 rounded-xl border border-[rgba(11,168,119,0.15)] bg-[var(--green-soft)] px-3 py-2.5 text-[12px] leading-relaxed text-[var(--green-dark)]">
-          {ins.script}
+        <div className="mt-2 line-clamp-2 rounded-xl bg-[#fbfcfc] px-3 py-2 text-[11px] leading-5 text-[#7b8492]">
+          <span className="font-medium text-[#53606f]">推荐话术：</span>{ins.script}
         </div>
 
-        {/* 底部：下一步 + 操作 */}
-        <div className="mt-3 flex items-center justify-between">
-          <div className="min-w-0 text-[11px]">
-            <span className="text-[var(--faint)]">下一步：</span>
-            <span className="font-medium text-[var(--green-dark)]">{c.nextFollowLabel || "今天尽快跟进"}</span>
-          </div>
-          <div className="flex shrink-0 gap-1.5">
+        <div className="mt-3 flex items-center justify-end gap-2">
             <button
               onClick={goChat}
-              className="rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-600"
+              className="home-work-secondary"
             >
               问 AI
             </button>
             <Link
               href={`/customers/${c.id}`}
               onClick={(e) => e.stopPropagation()}
-              className="rounded-lg bg-[var(--green)] px-2.5 py-1.5 text-[11px] font-medium text-white"
+              className="home-work-primary"
             >
               画像
             </Link>
-          </div>
         </div>
       </div>
     </div>

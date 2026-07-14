@@ -62,8 +62,6 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState("");
-  const [storeName, setStoreName] = useState("");
-  const [userName, setUserName] = useState("");
   const [activeTab, setActiveTab] = useState("tasks");
   const [custs, setCusts] = useState<PoolCustomer[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
@@ -81,8 +79,6 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
       const p = JSON.parse(utf8);
       const r = p.role || "";
       setRole(r);
-      setStoreName(p.storeName || "");
-      setUserName(p.name || "");
     } catch {
       router.replace("/login");
       return;
@@ -129,55 +125,53 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
   if (loading) return <div className="flex h-screen items-center justify-center text-sm text-slate-400">加载中…</div>;
 
   return (
-    <div className="min-h-screen bg-[var(--page)] pb-20">
-      {/* Inbox 头部 */}
-      <header className="bg-white px-4 pb-3 pt-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--green-dark)] text-lg font-bold text-white">
-              {(userName || "H")[0]}
+    <div className="home-inbox min-h-screen pb-[calc(94px+var(--safe-bottom))]">
+      <div className="home-inbox-frame">
+        {/* Inbox 头部 */}
+        <header className="home-inbox-header">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="home-app-logo" aria-hidden="true">H</div>
+              <div className="min-w-0">
+                <h1 className="truncate text-[20px] font-bold leading-tight text-[#111827]">门店 AI Inbox</h1>
+                <p className="mt-1 truncate text-[12px] text-[#8b95a5]">咨询成交模板 · 护理/销售/回访</p>
+              </div>
             </div>
-            <div>
-              <div className="text-[16px] font-semibold text-slate-900">{storeName || "门店 AI Inbox"}</div>
-              <div className="text-[11px] text-[var(--muted)]">{userName || "员工"}</div>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center">
             {(role === "owner" || role === "admin" || role === "manager") && (
               <Link
                 href="/admin"
-                className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm"
+                className="home-manage-button"
               >
-                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                   <circle cx="12" cy="12" r="3" />
-                  <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+                  <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63a1.7 1.7 0 0 0 1-1.55V3h4v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9a1.7 1.7 0 0 0 1.55 1H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z" />
                 </svg>
                 管理
               </Link>
             )}
           </div>
-        </div>
+          </div>
 
-        {/* 搜索 */}
-        <div className="mt-3">
-          <div className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-slate-50 px-3 py-2.5">
-            <svg viewBox="0 0 24 24" className="h-4 w-4 text-[var(--faint)]" fill="none" stroke="currentColor" strokeWidth="2">
+          {/* 搜索 */}
+          <div className="home-global-search">
+            <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-[#98a2b3]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
               <circle cx="11" cy="11" r="8" />
               <path d="m21 21-4.3-4.3" />
             </svg>
             <input
               type="text"
+              aria-label="搜索客户、会谈、知识库、话术"
               placeholder="搜索客户、会谈、知识库、话术"
-              className="flex-1 bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-[var(--faint)]"
+              className="min-w-0 flex-1 bg-transparent text-[14px] text-slate-700 outline-none placeholder:text-[#a3acb9]"
             />
           </div>
-        </div>
-      </header>
+        </header>
 
-      <div className="p-4">
+        <main className="home-inbox-content">
         {/* 统计卡 */}
-        <div className="mb-4 grid grid-cols-2 gap-3">
+        <div className="home-overview-grid">
           <StatCard
             icon={
               <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
@@ -190,7 +184,7 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
             label="今日重点客户"
             value={`${stats.priority} 位`}
             sub="需要优先处理"
-            color="text-emerald-600"
+            tone="green"
           />
           <StatCard
             icon={
@@ -202,7 +196,7 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
             label="今日待跟进"
             value={`${stats.followup} 个`}
             sub="动作待完成"
-            color="text-amber-600"
+            tone="orange"
           />
           <StatCard
             icon={
@@ -214,7 +208,7 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
             label="今日到店客户"
             value={`${stats.todayVisit} 位`}
             sub="需服务闭环"
-            color="text-sky-600"
+            tone="blue"
           />
           <StatCard
             icon={
@@ -225,17 +219,18 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
             label="待复盘会谈"
             value={`${stats.review} 条`}
             sub="可沉淀经验"
-            color="text-purple-600"
+            tone="purple"
           />
         </div>
 
         {/* 标签切换 */}
-        <div className="hm-tabs mb-4">
+        <div className="home-segment-tabs">
           {TABS.map((t) => (
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key)}
-              className={`hm-tab ${activeTab === t.key ? "active" : ""}`}
+              aria-pressed={activeTab === t.key}
+              className={`home-segment-tab ${activeTab === t.key ? "active" : ""}`}
             >
               {t.label}
             </button>
@@ -243,43 +238,36 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
         </div>
 
         {/* 今日 AI 工作台 */}
-        <div className="hm-section-title">
-          <h3>今日 AI 工作台</h3>
-          <button className="flex items-center gap-1 text-[var(--faint)]">
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+        <div className="home-workbench-title">
+          <h2 className="flex items-center gap-1.5">
+            今日 AI 工作台
+            <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#1aa474]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path d="m12 3 1.25 3.75L17 8l-3.75 1.25L12 13l-1.25-3.75L7 8l3.75-1.25L12 3Z" />
+              <path d="m18.5 14 .75 2.25L21.5 17l-2.25.75L18.5 20l-.75-2.25L15.5 17l2.25-.75L18.5 14Z" />
+            </svg>
+          </h2>
+          <span className="flex items-center gap-1 text-[11px] text-[#98a2b3]">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
               <line x1="12" y1="5" x2="12" y2="19" />
               <polyline points="19 12 12 19 5 12" />
             </svg>
             按经营价值排序
-          </button>
+          </span>
         </div>
 
         {filtered.length === 0 && activeTab !== "tasks" ? (
-          <div className="rounded-2xl border border-[var(--line)] bg-white p-8 text-center text-sm text-slate-400">
+          <div className="home-empty-state">
             暂无数据
           </div>
         ) : activeTab === "tasks" ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {tasks.length === 0 ? (
-              <div className="rounded-2xl border border-[var(--line)] bg-white p-8 text-center text-sm text-slate-400">
+              <div className="home-empty-state">
                 暂无任务
               </div>
             ) : (
               tasks.filter((t) => t.status === "todo").slice(0, 10).map((t) => (
-                <div key={t.id} className="rounded-2xl border border-[var(--line)] bg-white p-3.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[14px] font-medium text-[var(--ink)] truncate">{t.title}</div>
-                      {t.content && <div className="mt-1 text-[12px] text-[var(--muted)] line-clamp-2">{t.content}</div>}
-                      <div className="mt-1.5 flex items-center gap-2 text-[11px] text-[var(--faint)]">
-                        <span className="rounded-md bg-[var(--yellow-soft)] px-1.5 py-0.5 text-[10px] text-[var(--yellow)]">
-                          {t.task_type || "跟进"}
-                        </span>
-                        {t.deadline && <span>截止 {t.deadline?.slice(0, 10)}</span>}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <TaskInboxCard key={t.id} task={t} />
               ))
             )}
           </div>
@@ -290,9 +278,10 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
             ))}
           </div>
         )}
+        </main>
       </div>
 
-      <BottomNav items={navItems} />
+      <BottomNav items={navItems} variant="home" />
     </div>
   );
 }
@@ -302,22 +291,73 @@ function StatCard({
   label,
   value,
   sub,
-  color,
+  tone,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   sub: string;
-  color: string;
+  tone: "green" | "orange" | "blue" | "purple";
 }) {
   return (
-    <div className="rounded-2xl border border-[var(--line)] bg-white p-3.5">
-      <div className="flex items-center gap-2">
-        <span className={`${color}`}>{icon}</span>
-        <span className="text-[12px] font-medium text-slate-700">{label}</span>
+    <div className={`home-overview-card home-overview-${tone}`}>
+      <div className="flex items-center gap-2.5">
+        <span className="home-overview-icon">{icon}</span>
+        <span className="truncate text-[13px] font-semibold text-[#374151]">{label}</span>
       </div>
-      <div className="mt-2 text-[20px] font-bold text-slate-900">{value}</div>
-      <div className="text-[11px] text-[var(--faint)]">{sub}</div>
+      <div className="mt-3 text-[26px] font-bold leading-none tracking-tight text-[#111827]">{value}</div>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="truncate text-[12px] text-[#98a2b3]">{sub}</span>
+        <span className="home-overview-arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </span>
+      </div>
     </div>
+  );
+}
+
+function TaskInboxCard({ task }: { task: any }) {
+  const taskType = task.task_type || "跟进";
+  const taskText = `${task.title || ""} ${task.content || ""} ${taskType}`;
+  const tone = /风险|客诉|投诉|异常|退款|争议|签约|报价/.test(taskText)
+    ? "danger"
+    : /复盘|培训|知识/.test(taskText)
+      ? "purple"
+      : /活动|唤醒|复购|意向|成交/.test(taskText)
+        ? "warn"
+        : "green";
+  const customerInitial = String(task.title || "").match(/([\u4e00-\u9fff])(?:姐|女士|阿姨|先生|总)/)?.[1];
+  const initial = customerInitial || String(taskType).trim().slice(0, 1) || "任";
+
+  return (
+    <article className={`home-task-card home-task-${tone}`}>
+      <div className="home-task-main">
+        <div className="home-task-avatar" aria-hidden="true">{initial}</div>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-[15px] font-semibold text-[#111827]">{task.title}</h3>
+          <div className="mt-1.5 flex min-w-0 items-center gap-2">
+            <span className="home-task-tag">{taskType}</span>
+            {task.deadline && <time className="truncate text-[11px] text-[#98a2b3]">截止 {task.deadline.slice(0, 10)}</time>}
+          </div>
+        </div>
+        <span className="home-task-enter" aria-hidden="true">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </span>
+      </div>
+
+      {task.content && (
+        <div className="home-ai-suggestion">
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <path d="m12 3 1.25 3.75L17 8l-3.75 1.25L12 13l-1.25-3.75L7 8l3.75-1.25L12 3Z" />
+            <path d="m18.5 14 .75 2.25L21.5 17l-2.25.75L18.5 20l-.75-2.25L15.5 17l2.25-.75L18.5 14Z" />
+          </svg>
+          <p className="line-clamp-2"><span className="font-medium">建议：</span>{task.content}</p>
+        </div>
+      )}
+    </article>
   );
 }
