@@ -217,7 +217,9 @@ export function ChatClient({
         ...m,
         { id: d.messageId, role: "ai", text: d.answer, riskLevel: d.riskLevel, answerType: d.answerType },
       ]);
-      if (wasNew) router.refresh();
+      if (wasNew) {
+        router.replace(`/chat?sessionId=${d.sessionId}`);
+      }
     } catch {
       setMessages((m) => [...m, { id: "e" + Date.now(), role: "ai", text: "⚠️ 网络不太稳定，请稍后重试。" }]);
     } finally {

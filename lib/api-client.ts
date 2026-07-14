@@ -181,6 +181,19 @@ export const knowledgeApi = {
   },
 };
 
+export type ChatMessageItem = {
+  id: string;
+  role: "user" | "ai";
+  text: string;
+  riskLevel?: string;
+  answerType?: string;
+};
+
+export type SessionItem = {
+  id: string;
+  title: string | null;
+};
+
 // -- AI 对话 --
 export const chatApi = {
   ask: (question: string, sessionId?: string | null, customerId?: string) => {
@@ -192,6 +205,11 @@ export const chatApi = {
       body: { question, sessionId, customerId },
     });
   },
+
+  listSessions: () => backendApi<SessionItem[]>("/api/chat/sessions"),
+
+  listMessages: (sessionId: string) =>
+    backendApi<ChatMessageItem[]>(`/api/chat/sessions/${sessionId}/messages`),
 };
 
 // -- 客户 --

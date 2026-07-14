@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getToken, customerApi } from "@/lib/api-client";
+import { chatApi, customerApi, getToken, type SessionItem, type ChatMessageItem } from "@/lib/api-client";
 import { QUICK_QUESTIONS, type Role } from "@/lib/constants";
 import { ChatClient } from "@/components/ChatClient";
 import { CoachLanding } from "@/components/CoachLanding";
@@ -16,13 +16,11 @@ function ChatPageInner() {
   const sessionIdParam = searchParams.get("sessionId");
   const isNew = searchParams.get("new");
 
-  // Auth check + JWT 数据
   const [token, setToken] = useState<string | null>(null);
   const [payload, setPayload] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-
-  // 会话历史
-  const [initialMessages, setInitialMessages] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [initialMessages, setInitialMessages] = useState<ChatMessageItem[]>([]);
   const [customerName, setCustomerName] = useState<string | undefined>();
 
   useEffect(() => {
@@ -32,10 +30,22 @@ function ChatPageInner() {
     try {
       setPayload(decodeJwtPayload(t));
     } catch {}
-    setLoading(false);
-  }, [router]);
 
-  // 加载客户名
+    // 加载会话列表和历史消息
+    Promise.all([
+      chatApi.listSessions(),
+      sessionIdParam ? chatApi.listMessages(sessionIdParam) : Promise.resolve({ ok: true, data: [] } as any),
+    ]).then(([sessionsRes, messagesRes]) => {
+      if (sessionsRes.ok && sessionsRes.data) {
+        setSessions(sessionsRes.data);
+      }
+      if (messagesRes.ok && messagesRes.data) {
+        setInitialMessages(messagesRes.data);
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [router, sessionIdParam]);
+
   useEffect(() => {
     if (!customerId) return;
     customerApi.detail(customerId).then(r => {
@@ -48,10 +58,9 @@ function ChatPageInner() {
   const role = String(payload?.role || "consultant") as Role;
   const roleLabel = { owner: "老板", manager: "店长", consultant: "咨询师", beautician: "美容师", receptionist: "前台", operator: "运营" }[role] || role;
 
-  // AI 教练首屏
   const isLanding = !q && !customerId && !sessionIdParam && !isNew;
   if (isLanding) {
-    return <CoachLanding storeName="门店 AI 经营助手" isAdmin={role === "owner" || role === "manager"} sessions={[]} />;
+    return <CoachLanding storeName="门店 AI 经营助手" isAdmin={role === "owner" || role === "manager"} sessions={sessions} />;
   }
 
   return (
@@ -64,7 +73,7 @@ function ChatPageInner() {
       initialQuestion={q || ""}
       customerId={customerId || undefined}
       customerName={customerName}
-      sessions={[]}
+      sessions={sessions}
     />
   );
 }
