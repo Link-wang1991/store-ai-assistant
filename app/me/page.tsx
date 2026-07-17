@@ -28,7 +28,7 @@ export default function MePage() {
 
   if (loading) return null;
 
-  const isAdmin = role === "owner" || role === "manager";
+  const isAdmin = role === "owner" || role === "admin" || role === "manager";
   const nav = isAdmin ? MAIN_NAV : STAFF_NAV;
 
   return (
@@ -61,33 +61,24 @@ export default function MePage() {
           </div>
         </section>
 
-        <section>
-          <div className="mb-2 text-sm font-semibold text-slate-800">门店知识库</div>
-          <Link href={isAdmin ? "/admin/knowledge" : "/knowledge"} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4">
-            <div>
-              <div className="text-sm font-medium text-slate-800">项目资料 · 活动 · SOP · 话术</div>
-              <div className="mt-0.5 text-xs text-slate-400">{isAdmin ? "维护这里，AI 的回答会更准" : "遇到问题先查这里"}</div>
-            </div>
-            <span className="text-slate-300">›</span>
-          </Link>
-        </section>
-
         {isAdmin && (
           <section>
-            <div className="mb-2 text-sm font-semibold text-slate-800">管理设置</div>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { href: "/admin/employees", icon: "◍", label: "员工账号" },
-                { href: "/admin/knowledge", icon: "▤", label: "知识库" },
-                { href: "/admin/roles", icon: "⚷", label: "权限" },
-                { href: "/settings/ai", icon: "✦", label: "AI模型" },
-              ].map((l) => (
-                <Link key={l.href} href={l.href} className="flex flex-col items-center rounded-xl border border-slate-200 bg-white py-3.5 text-center">
-                  <span className="text-[17px] text-slate-400">{l.icon}</span>
-                  <span className="mt-1.5 text-[11px] text-slate-500">{l.label}</span>
-                </Link>
-              ))}
-            </div>
+            <div className="mb-2 text-sm font-semibold text-slate-800">管理</div>
+            <Link href="/admin" className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63a1.7 1.7 0 0 0 1-1.55V3h4v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9a1.7 1.7 0 0 0 1.55 1H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z" />
+                  </svg>
+                </span>
+                <div>
+                  <div className="text-sm font-medium text-slate-800">管理后台</div>
+                  <div className="mt-0.5 text-xs text-slate-400">员工、知识库、权限、数据看板</div>
+                </div>
+              </div>
+              <span className="text-slate-300">›</span>
+            </Link>
           </section>
         )}
 

@@ -44,7 +44,6 @@ export function BottomNav({ items, variant = "default" }: { items: NavItem[]; va
       <ul className={homeVariant ? "flex px-2 py-2" : "flex py-1.5"}>
         {items.map((it) => {
           const active = exact.includes(it.href) ? pathname === it.href : pathname.startsWith(it.href);
-          const isHome = it.label === "首页";
           return (
             <li key={it.href} className="flex-1">
               <Link
@@ -54,13 +53,9 @@ export function BottomNav({ items, variant = "default" }: { items: NavItem[]; va
                   active
                     ? homeVariant ? "active" : "bg-[var(--green-soft)] font-medium text-[var(--green-dark)]"
                     : homeVariant ? "" : "text-[var(--faint)]"
-                } ${!homeVariant && isHome ? "relative -top-1" : ""}`}
+                }`}
               >
-                {homeVariant ? (
-                  <NavLineIcon href={it.href} active={active} />
-                ) : (
-                  <span className={`leading-none ${isHome ? "text-[21px]" : "text-[17px]"}`}>{it.icon}</span>
-                )}
+                <NavLineIcon href={it.href} active={active} />
                 {it.label}
               </Link>
             </li>

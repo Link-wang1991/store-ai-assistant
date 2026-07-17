@@ -9,6 +9,7 @@ import { ActionForm } from "@/components/ActionForm";
 import { ActionButton } from "@/components/ActionButton";
 import { OpportunityCard } from "@/components/OpportunityCard";
 import { MemoryReview } from "@/components/MemoryReview";
+import { ScrollToHash } from "@/components/ScrollToHash";
 import { BottomNav, MAIN_NAV, STAFF_NAV } from "@/components/BottomNav";
 import { updateCustomer, addInteraction, deleteCustomer } from "@/lib/actions";
 import { fmtTime } from "@/lib/format";
@@ -105,6 +106,8 @@ export default async function CustomerProfilePage({ params }: { params: { id: st
         </div>
       </div>
 
+      <ScrollToHash />
+
       {/* AI 客户画像 */}
       <section className={sectionCls}>
         <div className="mb-3 flex items-center justify-between">
@@ -182,7 +185,7 @@ export default async function CustomerProfilePage({ params }: { params: { id: st
 
       {/* 会谈记录 */}
       {meetings.length > 0 && (
-        <section className={sectionCls}>
+        <section id="meetings" className={sectionCls}>
           <h2 className={sectionTitleCls}>会谈记录（{meetings.length}）</h2>
           <p className="mb-3 text-[11px] text-[var(--faint)]">TA 的历次会谈都汇总在这里，按时间排列——首次咨询、成交、服务后反馈各是一个阶段</p>
           <div className="space-y-2">

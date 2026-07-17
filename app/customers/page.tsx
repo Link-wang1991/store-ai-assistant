@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BottomNav, MAIN_NAV, STAFF_NAV } from "@/components/BottomNav";
@@ -104,6 +104,12 @@ export default function CustomersPage() {
     ? customersWithPool
     : customersWithPool.filter((c) => c._pool === activeTab);
 
+  const tabCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: customers.length };
+    for (const c of customersWithPool) counts[c._pool] = (counts[c._pool] || 0) + 1;
+    return counts;
+  }, [customersWithPool, customers.length]);
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[var(--page)]">
@@ -136,20 +142,25 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Tab 筛选 */}
+      {/* 分池筛选 */}
       <div className="mt-3 px-4">
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="grid grid-cols-4 gap-2">
           {TABS.map((t) => (
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] transition ${
+              className={`rounded-xl border py-2.5 transition ${
                 activeTab === t.key
-                  ? "bg-[var(--green)] text-white"
-                  : "border border-[var(--line)] bg-white text-[var(--muted)]"
+                  ? "border-[var(--green)] bg-[var(--green-soft)]"
+                  : "border-[var(--line)] bg-[var(--page)]"
               }`}
             >
-              {t.label}
+              <div className={`text-lg font-semibold ${activeTab === t.key ? "text-[var(--green-dark)]" : "text-[var(--ink)]"}`}>
+                {tabCounts[t.key] ?? 0}
+              </div>
+              <div className={`mt-0.5 text-[10px] ${activeTab === t.key ? "text-[var(--green-dark)]" : "text-[var(--faint)]"}`}>
+                {t.label}
+              </div>
             </button>
           ))}
         </div>
@@ -213,12 +224,6 @@ export default function CustomersPage() {
                       className="rounded-full border border-[var(--green)] bg-[var(--green-soft)] px-4 py-1.5 text-center text-[12px] font-medium text-[var(--green-dark)]"
                     >
                       问 AI 教练
-                    </Link>
-                    <Link
-                      href={`/meeting?customer=${c.id}`}
-                      className="rounded-full border border-[var(--line)] px-4 py-1.5 text-center text-[12px] text-[var(--muted)]"
-                    >
-                      会谈复盘
                     </Link>
                   </div>
                 </div>
