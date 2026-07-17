@@ -21,7 +21,7 @@ export function ReorganizeButton() {
       }
       className="flex w-full items-center justify-between rounded-xl border border-brand/40 bg-brand/5 px-3 py-2.5 text-sm font-medium text-brand-dark disabled:opacity-60"
     >
-      <span>{pending ? "正在重新整理…" : "🔄 一键重新智能整理已导入客户"}</span>
+      <span>{pending ? "正在重新整理…" : "一键重新智能整理已导入客户"}</span>
       <span>›</span>
     </button>
   );

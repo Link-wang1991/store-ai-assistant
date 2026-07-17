@@ -9,7 +9,8 @@ import { uploadKnowledge, createManualKnowledge } from "@/lib/actions";
 import { ActionForm } from "@/components/ActionForm";
 import { KnowledgeTabs } from "@/components/KnowledgeTabs";
 import { BatchUploadWizard } from "@/components/BatchUploadWizard";
-import { PageHeader, Card } from "@/components/ui";
+import { Card } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -36,18 +37,18 @@ export default async function UploadPage() {
 
   return (
     <div>
-      <PageHeader title="上传资料" subtitle="支持 md/txt/docx/pdf/Excel/CSV/PPT/图片，或直接手动输入" />
+      <AdminBackHeader title="上传资料" subtitle="支持 md/txt/docx/pdf/Excel/CSV/PPT/图片，或直接手动输入" />
       <KnowledgeTabs />
       <div className="p-4">
         <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700">
-          📋 这里只传<b>话术 / SOP / 制度 / 活动方案</b>等资料。<b>客户名单</b>请去{" "}
+          这里只传<b>话术 / SOP / 制度 / 活动方案</b>等资料。<b>客户名单</b>请去{" "}
           <Link href="/customers/import" className="font-medium underline">客户批量导入</Link>
           ，传到知识库不会进客户跟进系统。
         </div>
         {/* 批量上传：选多个文件，AI 自动判分类，上传后弹窗确认/微调 */}
         <Card>
           <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
-            ⚡ 批量上传（AI 自动分类）
+            批量上传（AI 自动分类）
             <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-normal text-brand-dark">推荐</span>
           </div>
           <p className="mb-3 text-xs text-slate-400">
@@ -136,7 +137,7 @@ export default async function UploadPage() {
 
         {/* 手动输入知识（不传文件）*/}
         <Card className="mt-4">
-          <div className="mb-2 text-sm font-semibold text-slate-700">✍️ 或手动输入知识（不用传文件）</div>
+          <div className="mb-2 text-sm font-semibold text-slate-700">或手动输入知识（不用传文件）</div>
           <ActionForm action={createManualKnowledge} submitText="创建知识" resetOnSuccess className="space-y-3">
             <div>
               <label className="mb-1 block text-xs text-slate-500">标题 *</label>

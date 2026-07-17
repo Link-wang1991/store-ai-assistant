@@ -7,7 +7,8 @@ import { hasPermission } from "@/lib/permissions";
 import { resolveRisk, deleteRisk } from "@/lib/actions";
 import { ActionForm } from "@/components/ActionForm";
 import { ActionButton } from "@/components/ActionButton";
-import { PageHeader, Card, RiskBadge, EmptyState } from "@/components/ui";
+import { Card, RiskBadge, EmptyState } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 import { fmtTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -23,10 +24,10 @@ export default async function RisksPage() {
 
   return (
     <div>
-      <PageHeader title="风险记录" subtitle={`待处理 ${open.length} · 已处理 ${closed.length}`} />
+      <AdminBackHeader title="风险记录" subtitle={`待处理 ${open.length} · 已处理 ${closed.length}`} />
       <div className="space-y-3 p-4">
         {risks.length === 0 ? (
-          <EmptyState text="暂无风险记录 👍" />
+          <EmptyState text="暂无风险记录" />
         ) : (
           <>
             {open.map((r) => (
@@ -39,7 +40,7 @@ export default async function RisksPage() {
                 </div>
                 <p className="mt-1.5 text-sm font-medium text-slate-800">
                   {r.question?.includes("[图片]") && (
-                    <span className="mr-1 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] text-purple-700">📷 图片</span>
+                    <span className="mr-1 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] text-purple-700">图片</span>
                   )}
                   {r.question}
                 </p>

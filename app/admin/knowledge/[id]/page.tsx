@@ -7,7 +7,8 @@ import { roleLabel } from "@/lib/roles";
 import { ROLES } from "@/lib/constants";
 import { ActionForm } from "@/components/ActionForm";
 import { updateKnowledgeRoles } from "@/lib/actions";
-import { PageHeader, Card } from "@/components/ui";
+import { Card } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 import { fmtDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ export default async function KnowledgeDetailPage({ params }: { params: { id: st
 
   return (
     <div>
-      <PageHeader title={doc.title} subtitle={`${doc.category} · .${doc.file_type} · ${fmtDate(doc.created_at)}`} />
+      <AdminBackHeader title={doc.title} subtitle={`${doc.category} · .${doc.file_type} · ${fmtDate(doc.created_at)}`} />
       <div className="space-y-3 p-4">
         {/* 文档信息 */}
         <Card>
@@ -64,7 +65,7 @@ export default async function KnowledgeDetailPage({ params }: { params: { id: st
         {/* 编辑可见角色：谁能在 AI 对话里检索到这条资料 */}
         {canEdit && (
           <Card>
-            <div className="mb-1 text-sm font-semibold text-slate-700">👁 可见角色</div>
+            <div className="mb-1 text-sm font-semibold text-slate-700">可见角色</div>
             <p className="mb-2 text-xs text-slate-400">只有勾选的角色，在 AI 对话里才能检索到这条资料。改了立即生效。</p>
             <ActionForm action={updateKnowledgeRoles} submitText="保存可见角色" className="space-y-2">
               <input type="hidden" name="id" value={doc.id} />
@@ -83,7 +84,7 @@ export default async function KnowledgeDetailPage({ params }: { params: { id: st
         {/* 原文件（图片直接显示，其它给查看链接）*/}
         {doc.file_url ? (
           <Card>
-            <div className="mb-2 text-sm font-semibold text-slate-700">📎 原文件</div>
+            <div className="mb-2 text-sm font-semibold text-slate-700">原文件</div>
             {IMG_EXTS.includes((doc.file_type || "").toLowerCase()) ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={doc.file_url} alt={doc.title} className="w-full rounded-lg border border-slate-100" />

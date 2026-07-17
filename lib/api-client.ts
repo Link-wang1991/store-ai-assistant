@@ -210,6 +210,9 @@ export const chatApi = {
 
   listMessages: (sessionId: string) =>
     backendApi<ChatMessageItem[]>(`/api/chat/sessions/${sessionId}/messages`),
+
+  deleteSession: (sessionId: string) =>
+    backendApi<void>(`/api/chat/sessions/${sessionId}`, { method: "DELETE" }),
 };
 
 // -- 客户 --

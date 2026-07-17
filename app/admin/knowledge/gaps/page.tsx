@@ -5,7 +5,8 @@ import { resolveGap, closeGap, gapToTask, deleteGap } from "@/lib/actions";
 import { ActionForm } from "@/components/ActionForm";
 import { ActionButton } from "@/components/ActionButton";
 import { KnowledgeTabs } from "@/components/KnowledgeTabs";
-import { PageHeader, Card, EmptyState } from "@/components/ui";
+import { Card, EmptyState } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 import { fmtTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -20,11 +21,11 @@ export default async function GapsPage() {
 
   return (
     <div>
-      <PageHeader title="知识库缺口" subtitle="员工问了但知识库没有标准答案的问题" />
+      <AdminBackHeader title="知识库缺口" subtitle="员工问了但知识库没有标准答案的问题" />
       <KnowledgeTabs />
       <div className="space-y-3 p-4">
         {(gaps || []).length === 0 ? (
-          <EmptyState text="暂无知识库缺口，知识库覆盖得不错 👍" />
+          <EmptyState text="暂无知识库缺口，知识库覆盖得不错" />
         ) : (
           (gaps || []).map((g: any) => (
             <Card key={g.id}>
@@ -60,7 +61,7 @@ export default async function GapsPage() {
 
               {/* 转为补充任务（可指定负责人 / 截止）*/}
               <details className="mt-3 border-t border-slate-50 pt-3">
-                <summary className="cursor-pointer text-xs text-brand-dark">📌 转为补充任务</summary>
+                <summary className="cursor-pointer text-xs text-brand-dark">转为补充任务</summary>
                 <ActionForm action={gapToTask} submitText="创建补充任务" className="mt-2 space-y-2">
                   <input type="hidden" name="id" value={g.id} />
                   <select

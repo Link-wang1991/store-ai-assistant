@@ -23,6 +23,13 @@ function ChatPageInner() {
   const [initialMessages, setInitialMessages] = useState<ChatMessageItem[]>([]);
   const [customerName, setCustomerName] = useState<string | undefined>();
 
+  const loadSessions = async () => {
+    const res = await chatApi.listSessions();
+    if (res.ok && res.data) {
+      setSessions(res.data);
+    }
+  };
+
   useEffect(() => {
     const t = getToken();
     if (!t) { router.replace("/login"); return; }
@@ -46,6 +53,15 @@ function ChatPageInner() {
     }).catch(() => setLoading(false));
   }, [router, sessionIdParam]);
 
+  const handleSessionDelete = async (id: string) => {
+    const res = await chatApi.deleteSession(id);
+    if (!res.ok) {
+      alert(res.error || "删除失败");
+      return;
+    }
+    await loadSessions();
+  };
+
   useEffect(() => {
     if (!customerId) return;
     customerApi.detail(customerId).then(r => {
@@ -60,7 +76,7 @@ function ChatPageInner() {
 
   const isLanding = !q && !customerId && !sessionIdParam && !isNew;
   if (isLanding) {
-    return <CoachLanding storeName="门店 AI 经营助手" isAdmin={role === "owner" || role === "manager"} sessions={sessions} />;
+    return <CoachLanding storeName="门店 AI 经营助手" isAdmin={role === "owner" || role === "manager"} sessions={sessions} onSessionDelete={handleSessionDelete} />;
   }
 
   return (
@@ -74,6 +90,7 @@ function ChatPageInner() {
       customerId={customerId || undefined}
       customerName={customerName}
       sessions={sessions}
+      onSessionDelete={handleSessionDelete}
     />
   );
 }

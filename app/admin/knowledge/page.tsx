@@ -9,7 +9,8 @@ import { toggleKnowledgeDoc, deleteKnowledgeDoc } from "@/lib/actions";
 import { KnowledgeTabs } from "@/components/KnowledgeTabs";
 import { ActionButton } from "@/components/ActionButton";
 import { KnowledgeCategoryEdit } from "@/components/KnowledgeCategoryEdit";
-import { PageHeader, EmptyState } from "@/components/ui";
+import { EmptyState } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 import { fmtDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,7 @@ export default async function KnowledgeListPage() {
 
   return (
     <div>
-      <PageHeader title="知识库" subtitle="门店专属知识，AI 回答的依据" />
+      <AdminBackHeader title="知识库" subtitle="门店专属知识，AI 回答的依据" />
       <KnowledgeTabs />
       <div className="space-y-2.5 p-4">
         <div className="grid grid-cols-2 gap-2.5">
@@ -44,13 +45,13 @@ export default async function KnowledgeListPage() {
             href="/admin/knowledge/upload"
             className="block rounded-xl border border-dashed border-slate-300 bg-white p-3.5 text-center text-sm font-medium text-brand-dark transition hover:border-brand/50"
           >
-            ＋ 上传新资料
+            上传新资料
           </Link>
           <Link
             href="/settings/config#knowledge"
             className="block rounded-xl border border-[var(--line)] bg-white p-3.5 text-center text-sm font-medium text-slate-600 transition hover:border-slate-300"
           >
-            ⚙ 分类管理
+            分类管理
           </Link>
         </div>
 

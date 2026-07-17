@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { RISK_LEVEL_COLORS, type RiskLevel } from "@/lib/constants";
 import { chatApi, getToken } from "@/lib/api-client";
@@ -154,6 +153,7 @@ export function ChatClient({
   customerId,
   customerName,
   sessions = [],
+  onSessionDelete,
 }: {
   roleLabel: string;
   storeName: string;
@@ -164,6 +164,7 @@ export function ChatClient({
   customerId?: string;
   customerName?: string;
   sessions?: SessionItem[];
+  onSessionDelete?: (id: string) => void | Promise<void>;
 }) {
   const router = useRouter();
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
@@ -235,13 +236,19 @@ export function ChatClient({
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3">
-        <Link href="/chat" className="text-xs text-[var(--green-dark)]">‹ AI 教练</Link>
-        <div className="text-center">
-          <div className="text-sm font-semibold text-slate-900">{storeName}</div>
-          <div className="text-xs text-slate-400">{roleLabel} · AI 助手</div>
+      <header className="sticky top-0 z-30 border-b border-[var(--line)] bg-white px-4 py-3">
+        <div className="relative flex items-center justify-center">
+          <button
+            onClick={() => router.push("/chat")}
+            className="absolute left-0 flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[15px] font-bold text-[var(--ink)] transition hover:bg-[var(--line)]"
+          >
+            ←
+          </button>
+          <div className="text-center">
+            <div className="text-[15px] font-semibold text-[var(--ink)]">AI 教练</div>
+            <div className="text-[11px] text-[var(--faint)]">{roleLabel} · AI 助手</div>
+          </div>
         </div>
-        <Link href="/me" className="text-xs text-slate-400">我的</Link>
       </header>
 
       <div className="no-scrollbar flex items-center gap-2 overflow-x-auto border-b border-slate-100 bg-white px-3 py-2">
@@ -252,15 +259,36 @@ export function ChatClient({
           ＋ 新对话
         </button>
         {sessions.map((s) => (
-          <button
+          <div
             key={s.id}
-            onClick={() => router.push(`/chat?sessionId=${s.id}`)}
-            className={`max-w-[9rem] shrink-0 truncate rounded-full px-3 py-1 text-xs ${
-              s.id === sessionId ? "bg-[var(--green-soft)] font-medium text-[var(--green-dark)]" : "border border-slate-200 text-slate-600"
+            className={`group relative flex max-w-[9rem] shrink-0 items-center rounded-full text-xs ${
+              s.id === sessionId
+                ? "bg-[var(--green-soft)] font-medium text-[var(--green-dark)]"
+                : "border border-slate-200 text-slate-600"
             }`}
           >
-            {s.title || "未命名对话"}
-          </button>
+            <button
+              onClick={() => router.push(`/chat?sessionId=${s.id}`)}
+              className="truncate px-3 py-1 pr-5"
+            >
+              {s.title || "未命名对话"}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm("确定删除这条对话记录吗？")) {
+                  onSessionDelete?.(s.id);
+                  if (s.id === sessionId) {
+                    router.replace("/chat?new=1");
+                  }
+                }
+              }}
+              className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full px-1 text-[10px] text-slate-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100"
+              title="删除"
+            >
+              ×
+            </button>
+          </div>
         ))}
       </div>
 

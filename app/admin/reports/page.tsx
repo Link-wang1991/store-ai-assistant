@@ -3,7 +3,8 @@ import { getAuthContext } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { hasPermission } from "@/lib/permissions";
 import { todayRange, fmtDate } from "@/lib/format";
-import { PageHeader, Card, StatCard, SectionHeader } from "@/components/ui";
+import { Card, StatCard, SectionHeader } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 import { DailyReportButton } from "@/components/DailyReportButton";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +42,7 @@ export default async function ReportsPage() {
 
   return (
     <div>
-      <PageHeader title="增长复盘" subtitle={`${fmtDate(new Date().toISOString())} · 成交卡点 / 客户 / 风险 / 明日动作`} />
+      <AdminBackHeader title="增长复盘" subtitle={`${fmtDate(new Date().toISOString())} · 成交卡点 / 客户 / 风险 / 明日动作`} />
       <div className="space-y-4 p-4">
         {/* 一键生成经营日报 */}
         <DailyReportButton />

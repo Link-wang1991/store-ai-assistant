@@ -10,13 +10,25 @@ const STAGE_LABEL: Record<string, string> = {
   new: "新客咨询", intent: "意向", deal: "已成交", regular: "老客", churn_risk: "流失风险",
 };
 const STAGE_COLOR: Record<string, string> = {
-  new: "bg-sky-50 text-sky-600", intent: "bg-emerald-50 text-emerald-600", deal: "bg-brand/10 text-brand-dark",
-  regular: "bg-slate-100 text-slate-500", churn_risk: "bg-amber-50 text-amber-600",
+  new: "bg-sky-50 text-sky-600", intent: "bg-emerald-50 text-emerald-600", deal: "bg-[var(--green-soft)] text-[var(--green-dark)]",
+  regular: "bg-[var(--surface-2)] text-[var(--faint)]", churn_risk: "bg-[var(--yellow-soft)] text-[var(--yellow)]",
+};
+const POOL_LABEL: Record<string, string> = {
+  today: "今日到店", new: "新客", new_deal: "新成交", regular: "老客", dormant: "沉睡", risk: "风险",
+};
+const POOL_COLOR: Record<string, string> = {
+  today: "bg-[var(--green-soft)] text-[var(--green-dark)]",
+  new: "bg-sky-50 text-sky-600",
+  new_deal: "bg-[var(--green)] text-white",
+  regular: "bg-[var(--surface-2)] text-[var(--faint)]",
+  dormant: "bg-[var(--surface-2)] text-[var(--faint)]",
+  risk: "bg-[var(--red-soft)] text-[var(--red)]",
 };
 
 export type BulkCust = {
   id: string; name: string; stage: string; phone?: string | null; notes?: string | null;
   concerns?: string | null; assigned_to?: string | null; assigneeName?: string | null;
+  pool?: string | null; last_visit_at?: string | null; next_follow_at?: string | null;
 };
 
 export function CustomerBulkManager({
@@ -119,27 +131,48 @@ export function CustomerBulkManager({
 
       {/* 客户列表 */}
       {customers.map((c) => (
-        <div key={c.id} className={`rounded-xl border bg-white p-3.5 ${sel.has(c.id) ? "border-brand/50" : "border-slate-200/70"}`}>
+        <div key={c.id} className={`rounded-2xl border bg-white p-3.5 ${sel.has(c.id) ? "border-[var(--green)]" : "border-[var(--line)]"}`}>
           <div className="flex items-start gap-2.5">
             <input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="mt-1 shrink-0" />
             <Link href={`/customers/${c.id}`} className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+              <div className="flex flex-wrap items-center gap-1.5 text-[14px] font-medium text-[var(--ink)]">
                 {c.name}
-                <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${STAGE_COLOR[c.stage] || "bg-slate-100 text-slate-600"}`}>
+                {c.pool && (
+                  <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${POOL_COLOR[c.pool] || "bg-[var(--surface-2)] text-[var(--faint)]"}`}>
+                    {POOL_LABEL[c.pool] || c.pool}
+                  </span>
+                )}
+                <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${STAGE_COLOR[c.stage] || "bg-[var(--surface-2)] text-[var(--faint)]"}`}>
                   {STAGE_LABEL[c.stage] || c.stage}
                 </span>
               </div>
-              <div className="mt-1 text-xs text-slate-400">
+              <div className="mt-1 text-[11px] text-[var(--faint)]">
                 {c.assigneeName ? `负责人 ${c.assigneeName}` : "未分配"}
                 {c.phone ? ` · ${c.phone}` : ""}
               </div>
+              <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-[var(--faint)]">
+                {c.last_visit_at && <span>最近到店 {c.last_visit_at.slice(0, 10)}</span>}
+                {c.next_follow_at && <span>下次跟进 {c.next_follow_at.slice(0, 10)}</span>}
+              </div>
               {c.concerns ? (
-                <div className="mt-1 text-xs text-amber-600">顾虑：{c.concerns}</div>
+                <div className="mt-1 text-[11px] text-[var(--yellow)]">顾虑：{c.concerns}</div>
               ) : (
-                c.notes && <div className="mt-1 line-clamp-1 text-xs text-slate-500">{c.notes}</div>
+                c.notes && <div className="mt-1 line-clamp-1 text-[11px] text-[var(--muted)]">{c.notes}</div>
               )}
             </Link>
             <div className="flex shrink-0 flex-col items-end gap-1.5 self-center">
+              <Link
+                href={`/customers/${c.id}`}
+                className="rounded-md bg-[var(--surface-2)] px-2 py-1 text-[11px] font-medium text-[var(--ink)]"
+              >
+                查看
+              </Link>
+              <Link
+                href={`/chat?customerId=${c.id}&new=1`}
+                className="rounded-md bg-[var(--green-soft)] px-2 py-1 text-[11px] font-medium text-[var(--green-dark)]"
+              >
+                问 AI 教练
+              </Link>
               {employees.length > 0 && (
                 <CustomerAssign customerId={c.id} employees={employees} currentId={c.assigned_to} />
               )}

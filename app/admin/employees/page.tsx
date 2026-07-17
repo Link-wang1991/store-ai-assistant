@@ -9,7 +9,8 @@ import { ActionForm } from "@/components/ActionForm";
 import { ActionButton } from "@/components/ActionButton";
 import { EmployeeNameEdit } from "@/components/EmployeeNameEdit";
 import { EmployeeRoleEdit, CustomerTransfer } from "@/components/EmployeeAdmin";
-import { PageHeader, Card } from "@/components/ui";
+import { Card } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -33,12 +34,12 @@ export default async function EmployeesPage() {
 
   return (
     <div>
-      <PageHeader title="员工管理" subtitle={`共 ${employees?.length || 0} 人`} />
+      <AdminBackHeader title="员工管理" subtitle={`共 ${employees?.length || 0} 人`} />
       <div className="space-y-4 p-4">
         {/* 添加员工 */}
         {canCreate && (
         <Card>
-          <div className="mb-2 text-sm font-semibold text-slate-700">➕ 添加员工</div>
+          <div className="mb-2 text-sm font-semibold text-slate-700">添加员工</div>
           <ActionForm action={createEmployee} submitText="添加员工" resetOnSuccess className="space-y-2">
             <input name="name" placeholder="姓名" className={inputCls} required />
             <input name="email" type="email" placeholder="登录邮箱" className={inputCls} required />

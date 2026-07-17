@@ -5,7 +5,8 @@ import { addBannedWord, removeBannedWord } from "@/lib/actions";
 import { ActionForm } from "@/components/ActionForm";
 import { ActionButton } from "@/components/ActionButton";
 import { KnowledgeTabs } from "@/components/KnowledgeTabs";
-import { PageHeader, Card } from "@/components/ui";
+import { Card } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +19,11 @@ export default async function BannedPage() {
 
   return (
     <div>
-      <PageHeader title="禁用词管理" subtitle="生成话术/文案时自动提醒规避" />
+      <AdminBackHeader title="禁用词管理" subtitle="生成话术/文案时自动提醒规避" />
       <KnowledgeTabs />
       <div className="space-y-3 p-4">
         <Card>
-          <div className="mb-2 text-sm font-semibold text-slate-700">➕ 添加禁用词</div>
+          <div className="mb-2 text-sm font-semibold text-slate-700">添加禁用词</div>
           <ActionForm action={addBannedWord} submitText="添加" resetOnSuccess className="space-y-2">
             <input name="word" placeholder="如：根治" className={inputCls} required />
             <input name="reason" placeholder="原因（选填）" className={inputCls} />

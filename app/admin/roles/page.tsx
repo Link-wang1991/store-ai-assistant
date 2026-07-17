@@ -12,7 +12,8 @@ import {
 } from "@/lib/constants";
 import { createRoleDefinition, saveRoleDefinition, saveRolePermissions } from "@/lib/actions";
 import { ActionForm } from "@/components/ActionForm";
-import { PageHeader, Card } from "@/components/ui";
+import { Card } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ export default async function RolesPage() {
 
   return (
     <div>
-      <PageHeader title="权限中心" subtitle="自定义角色名称、状态、数据权限" />
+      <AdminBackHeader title="权限中心" subtitle="自定义角色名称、状态、数据权限" />
       <div className="space-y-4 p-4">
         {(defs as any[]).length === 0 && (
           <Card>
@@ -59,7 +60,7 @@ export default async function RolesPage() {
 
         {/* 新增自定义角色 */}
         <Card>
-          <div className="mb-2 text-sm font-semibold text-slate-700">➕ 新增自定义角色</div>
+          <div className="mb-2 text-sm font-semibold text-slate-700">新增自定义角色</div>
           <ActionForm action={createRoleDefinition} submitText="新增角色" resetOnSuccess className="space-y-2">
             <input name="role_key" placeholder="角色标识(英文，如 skin_manager)" className={inputCls} required />
             <input name="display_name" placeholder="显示名称(如 皮肤管理师)" className={inputCls} required />
@@ -93,7 +94,7 @@ export default async function RolesPage() {
             </ActionForm>
 
             <details className="mt-3 border-t border-slate-50 pt-3">
-              <summary className="cursor-pointer text-xs text-brand-dark">⚙️ 配置「{d.display_name}」权限矩阵</summary>
+              <summary className="cursor-pointer text-xs text-brand-dark">配置「{d.display_name}」权限矩阵</summary>
               <ActionForm action={saveRolePermissions} submitText="保存权限" className="mt-2 space-y-3">
                 <input type="hidden" name="role_key" value={d.role_key} />
                 {PERMISSION_MODULES.map((m) => {

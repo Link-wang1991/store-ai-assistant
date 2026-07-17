@@ -2,7 +2,8 @@ import { getAuthContext } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { type Role } from "@/lib/constants";
 import { roleLabel } from "@/lib/roles";
-import { PageHeader, Card, RiskBadge, EmptyState } from "@/components/ui";
+import { Card, RiskBadge, EmptyState } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 import { fmtTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export default async function ChatsPage() {
 
   return (
     <div>
-      <PageHeader title="员工提问记录" subtitle={`最近 ${(msgs as any[]).length} 条`} />
+      <AdminBackHeader title="员工提问记录" subtitle={`最近 ${(msgs as any[]).length} 条`} />
       <div className="space-y-3 p-4">
         {(msgs as any[]).length === 0 ? (
           <EmptyState text="还没有员工提问记录" />

@@ -4,7 +4,8 @@ import { TASK_TYPES, TASK_STATUS_LABELS, type TaskStatus } from "@/lib/constants
 import { roleLabel } from "@/lib/roles";
 import { createTask } from "@/lib/actions";
 import { ActionForm } from "@/components/ActionForm";
-import { PageHeader, Card, EmptyState } from "@/components/ui";
+import { Card, EmptyState } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 import { fmtTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -22,10 +23,10 @@ export default async function AdminTasksPage() {
 
   return (
     <div>
-      <PageHeader title="增长动作" subtitle="推动客户跟进 / 活动转化 / 老客唤醒 / 服务补救 / 员工训练" />
+      <AdminBackHeader title="增长动作" subtitle="推动客户跟进 / 活动转化 / 老客唤醒 / 服务补救 / 员工训练" />
       <div className="space-y-4 p-4">
         <Card>
-          <div className="mb-2 text-sm font-semibold text-slate-700">➕ 新建增长动作</div>
+          <div className="mb-2 text-sm font-semibold text-slate-700">新建增长动作</div>
           <ActionForm action={createTask} submitText="创建跟进动作" resetOnSuccess className="space-y-2">
             <input name="title" placeholder="动作标题（如：唤醒沉默老客、推进体验客成交）" className={inputCls} required />
             <textarea name="content" rows={2} placeholder="动作内容（选填）" className={inputCls} />

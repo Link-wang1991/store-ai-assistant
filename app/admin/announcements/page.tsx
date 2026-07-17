@@ -7,7 +7,8 @@ import { hasPermission } from "@/lib/permissions";
 import { createAnnouncement, toggleAnnouncement, announcementToTask, deleteAnnouncement } from "@/lib/actions";
 import { ActionForm } from "@/components/ActionForm";
 import { ActionButton } from "@/components/ActionButton";
-import { PageHeader, Card, EmptyState } from "@/components/ui";
+import { Card, EmptyState } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 import { fmtTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -35,10 +36,10 @@ export default async function AnnouncementsPage() {
 
   return (
     <div>
-      <PageHeader title="通知中心" subtitle="排班/培训/活动/制度通知，员工端与 AI 都能看到" />
+      <AdminBackHeader title="通知中心" subtitle="排班/培训/活动/制度通知，员工端与 AI 都能看到" />
       <div className="space-y-4 p-4">
         <Card>
-          <div className="mb-2 text-sm font-semibold text-slate-700">➕ 发布通知</div>
+          <div className="mb-2 text-sm font-semibold text-slate-700">发布通知</div>
           <ActionForm action={createAnnouncement} submitText="发布" resetOnSuccess className="space-y-2">
             <input name="title" placeholder="标题，如：7月活动销售培训" className={inputCls} required />
             <textarea name="content" rows={3} placeholder="内容，如：明天下午3点会议室，全体咨询师参加" className={inputCls} />
@@ -115,7 +116,7 @@ export default async function AnnouncementsPage() {
                 <div className="mt-3 flex gap-4 border-t border-slate-50 pt-3">
                   <ActionButton
                     action={announcementToTask.bind(null, a.id)}
-                    label="📌 转为执行任务"
+                    label="转为执行任务"
                     className="text-xs text-brand-dark"
                   />
                   <ActionButton

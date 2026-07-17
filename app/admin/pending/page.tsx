@@ -5,7 +5,8 @@ import { roleLabel } from "@/lib/roles";
 import { replyPending, deletePendingQuestion } from "@/lib/actions";
 import { ActionForm } from "@/components/ActionForm";
 import { ActionButton } from "@/components/ActionButton";
-import { PageHeader, Card, EmptyState } from "@/components/ui";
+import { Card, EmptyState } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 import { fmtTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ export default async function PendingPage() {
 
   return (
     <div>
-      <PageHeader title="待确认问题" subtitle={`待处理 ${pending.length} · 已处理 ${handled.length}`} />
+      <AdminBackHeader title="待确认问题" subtitle={`待处理 ${pending.length} · 已处理 ${handled.length}`} />
       <div className="space-y-3 p-4">
         {list.length === 0 ? (
           <EmptyState text="暂无待确认问题" />

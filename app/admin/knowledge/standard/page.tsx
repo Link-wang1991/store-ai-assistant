@@ -4,7 +4,8 @@ import { KNOWLEDGE_CATEGORIES } from "@/lib/constants";
 import { createStandardAnswer } from "@/lib/actions";
 import { ActionForm } from "@/components/ActionForm";
 import { KnowledgeTabs } from "@/components/KnowledgeTabs";
-import { PageHeader, Card, EmptyState } from "@/components/ui";
+import { Card, EmptyState } from "@/components/ui";
+import { AdminBackHeader } from "@/components/AdminBackHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +18,11 @@ export default async function StandardPage() {
 
   return (
     <div>
-      <PageHeader title="标准答案" subtitle="老板/店长沉淀的门店标准回答" />
+      <AdminBackHeader title="标准答案" subtitle="老板/店长沉淀的门店标准回答" />
       <KnowledgeTabs />
       <div className="space-y-3 p-4">
         <Card>
-          <div className="mb-2 text-sm font-semibold text-slate-700">➕ 新增标准答案</div>
+          <div className="mb-2 text-sm font-semibold text-slate-700">新增标准答案</div>
           <ActionForm action={createStandardAnswer} submitText="保存" resetOnSuccess className="space-y-2">
             <input name="question" placeholder="问题，如：客户嫌贵怎么回？" className={inputCls} required />
             <textarea name="answer" rows={3} placeholder="标准答案…" className={inputCls} required />
