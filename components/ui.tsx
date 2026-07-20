@@ -2,9 +2,7 @@ import Link from "next/link";
 import { RISK_LEVEL_COLORS, RISK_LEVEL_LABELS, type RiskLevel } from "@/lib/constants";
 
 // ============================================================
-// 基础 UI 组件：GPT 简约风 —— 白底、细边、克制配色、充足留白、无重阴影。
-// 设计 token：卡片 rounded-xl + border-slate-200/70；强调色 brand 克制使用；
-// 次要信息用 slate-400/500；分区用 SectionHeader 统一头部。
+// 基础 UI 组件：与门店 AI Inbox 一致的柔和绿底、白色卡片与细边界。
 // ============================================================
 
 export function Card({
@@ -15,7 +13,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={`rounded-xl border border-slate-200/70 bg-white p-4 ${className}`}>
+    <div className={`ui-card ${className}`}>
       {children}
     </div>
   );
@@ -32,12 +30,12 @@ export function SectionHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-2.5 flex items-end justify-between px-0.5">
+    <div className="ui-section-header">
       <div>
-        <h2 className="text-[13px] font-semibold tracking-tight text-slate-800">{title}</h2>
-        {desc && <p className="mt-0.5 text-[11px] text-slate-400">{desc}</p>}
+        <h2>{title}</h2>
+        {desc && <p>{desc}</p>}
       </div>
-      {action && <div className="text-[12px] text-slate-400">{action}</div>}
+      {action && <div className="ui-section-action">{action}</div>}
     </div>
   );
 }
@@ -46,7 +44,7 @@ export function StatCard({
   label,
   value,
   href,
-  accent = "text-slate-900",
+  accent = "text-[var(--ink)]",
 }: {
   label: string;
   value: number | string;
@@ -54,9 +52,9 @@ export function StatCard({
   accent?: string;
 }) {
   const inner = (
-    <div className="rounded-xl border border-slate-200/70 bg-white px-3.5 py-3 transition hover:border-slate-300">
+    <div className="ui-stat-card">
       <div className={`text-[22px] font-semibold leading-none ${accent}`}>{value}</div>
-      <div className="mt-1.5 text-xs text-slate-500">{label}</div>
+      <div>{label}</div>
     </div>
   );
   return href ? <Link href={href}>{inner}</Link> : inner;
@@ -65,7 +63,7 @@ export function StatCard({
 export function RiskBadge({ level }: { level?: string | null }) {
   if (!level) return null;
   const lv = level as RiskLevel;
-  const cls = RISK_LEVEL_COLORS[lv] || "bg-slate-100 text-slate-600";
+  const cls = RISK_LEVEL_COLORS[lv] || "bg-[var(--surface-2)] text-[var(--muted)]";
   return (
     <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ${cls}`}>
       {lv} · {RISK_LEVEL_LABELS[lv] || ""}
@@ -75,7 +73,7 @@ export function RiskBadge({ level }: { level?: string | null }) {
 
 export function Tag({
   children,
-  className = "bg-slate-100 text-slate-600",
+  className = "bg-[var(--surface-2)] text-[var(--muted)]",
 }: {
   children: React.ReactNode;
   className?: string;
@@ -89,7 +87,7 @@ export function Tag({
 
 export function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-400">
+    <div className="ui-empty-state">
       {text}
     </div>
   );
@@ -105,10 +103,10 @@ export function PageHeader({
   right?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between border-b border-slate-200/70 bg-white px-4 py-3.5">
+    <div className="ui-page-header">
       <div>
-        <h1 className="text-[17px] font-semibold tracking-tight text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-xs text-slate-400">{subtitle}</p>}
+        <h1>{title}</h1>
+        {subtitle && <p>{subtitle}</p>}
       </div>
       {right}
     </div>

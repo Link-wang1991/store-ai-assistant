@@ -215,7 +215,7 @@ export function ImportWizard({ employees = [] }: { employees?: { id: string; nam
   };
 
   return (
-    <div className="space-y-4">
+    <div className="import-wizard space-y-4">
       <StepBar step={step} />
       {error && <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">{error}</div>}
 
@@ -230,7 +230,7 @@ export function ImportWizard({ employees = [] }: { employees?: { id: string; nam
               disabled={parsing}
               className="hidden"
             />
-            <div className="text-3xl text-slate-300">⬆</div>
+            <div className="mx-auto grid h-10 w-10 place-items-center rounded-xl bg-[var(--green-soft)] text-[var(--green-dark)]"><svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4M7.5 8.5 12 4l4.5 4.5" /><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" /></svg></div>
             <div className="mt-2 text-sm text-slate-600">{parsing ? "正在解析名单…" : "点击选择名单文件"}</div>
             <div className="mt-1 text-[11px] text-[var(--muted)]">支持 CSV / Excel(xlsx,xls) / Word(docx)；表头不需标准，AI 自动识别</div>
           </label>

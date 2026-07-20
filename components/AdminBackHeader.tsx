@@ -10,17 +10,18 @@ export function AdminBackHeader({
   backHref?: string;
 }) {
   return (
-    <div className="sticky top-0 z-30 border-b border-[var(--line)] bg-white px-4 py-3">
+    <div className="admin-back-header">
       <div className="relative flex items-center justify-center">
         <Link
           href={backHref}
-          className="absolute left-0 flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--surface-2)] text-center text-[15px] font-bold text-[var(--ink)] transition hover:bg-[var(--line)]"
+          className="admin-back-button"
+          aria-label="返回管理页"
         >
-          ←
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
         </Link>
         <div className="text-center">
-          <div className="text-[15px] font-semibold text-[var(--ink)]">{title}</div>
-          {subtitle && <div className="text-[11px] text-[var(--faint)]">{subtitle}</div>}
+          <div className="admin-back-title">{title}</div>
+          {subtitle && <div className="admin-back-subtitle">{subtitle}</div>}
         </div>
       </div>
     </div>

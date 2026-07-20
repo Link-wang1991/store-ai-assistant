@@ -4,7 +4,25 @@
 
 import { db } from "../db";
 import { getServerToken } from "../api-client";
+import { API_BASE_URL } from "../data-source";
 import type { AuthContext } from "../types";
+
+async function verifyBackendToken(token: string): Promise<{ userId: string } | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const payload = await response.json();
+    return response.ok && payload.code === 200 && payload.data?.userId ? payload.data : null;
+  } catch {
+    return null;
+  }
+}
 
 async function loadFullContext(authUserId: string): Promise<AuthContext | null> {
   const user = await db.users.getByAuthId(authUserId);
@@ -45,11 +63,9 @@ export async function getAuthContext(): Promise<AuthContext | null> {
   try {
     const token = await getServerToken();
     if (!token) return null;
-    const payload = JSON.parse(
-      Buffer.from(token.split(".")[1], "base64url").toString(),
-    );
-    if (!payload.sub) return null;
-    return loadFullContext(payload.sub);
+    const identity = await verifyBackendToken(token);
+    if (!identity) return null;
+    return loadFullContext(identity.userId);
   } catch {
     return null;
   }

@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/auth";
 import { canEnterAdmin } from "@/lib/permissions";
 import { BottomNav, MAIN_NAV } from "@/components/BottomNav";
+import { SubpageHeader } from "@/components/SubpageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -20,25 +20,21 @@ export default async function PrivacySettingsPage() {
   if (!canEnterAdmin(ctx)) redirect("/me");
 
   return (
-    <div className="min-h-screen pb-16">
-      <header className="border-b border-[var(--line)] bg-white px-4 py-4">
-        <Link href="/me" className="text-[11px] text-[var(--green-dark)]">‹ 我的</Link>
-        <div className="mt-1 text-[18px] font-semibold tracking-tight text-slate-900">录音隐私设置</div>
-        <div className="mt-0.5 text-xs text-slate-500">门店当前的录音与隐私保护策略</div>
-      </header>
-      <div className="space-y-2 p-4">
+    <div className="subpage-shell">
+      <SubpageHeader title="录音隐私设置" description="门店当前的录音与隐私保护策略" />
+      <main className="subpage-content space-y-2">
         {POLICIES.map((p) => (
-          <div key={p.title} className="flex items-start justify-between gap-3 rounded-xl border border-[var(--line)] bg-white p-4">
+          <div key={p.title} className="subpage-card flex items-start justify-between gap-3 p-4">
             <div>
-              <div className="text-sm font-medium text-slate-800">{p.title}</div>
+              <div className="text-sm font-medium text-[var(--ink)]">{p.title}</div>
               <div className="mt-0.5 text-xs text-[var(--muted)]">{p.desc}</div>
             </div>
-            <span className="mt-0.5 shrink-0 rounded-full bg-[var(--green-soft)] px-2 py-0.5 text-[10px] text-[var(--green-dark)]">已开启</span>
+            <span className="subpage-status">已开启</span>
           </div>
         ))}
-        <p className="px-0.5 pt-2 text-[11px] text-[var(--faint)]">以上为门店默认隐私策略。可调开关的精细化设置正在接入。</p>
-      </div>
-      <BottomNav items={MAIN_NAV} />
+        <p className="subpage-hint">以上为门店默认隐私策略。可调开关的精细化设置正在接入。</p>
+      </main>
+      <BottomNav items={MAIN_NAV} activeHref="/me" />
     </div>
   );
 }

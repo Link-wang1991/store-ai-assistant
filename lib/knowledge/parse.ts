@@ -4,6 +4,17 @@ import { callQwenVision, qwenConfigured } from "../ai/qwen";
 
 const IMAGE_EXTS = ["jpg", "jpeg", "png", "webp", "bmp", "gif", "image"];
 
+async function xlsxSheetsToCsv(buffer: Buffer): Promise<Array<{ name: string; csv: string }>> {
+  const { default: readExcelFile } = await import("read-excel-file/node");
+  const sheets = await readExcelFile(buffer) as Array<{ sheet: string; data: unknown[][] }>;
+  return sheets.map((sheet) => {
+    const csv = sheet.data
+      .map((row) => row.map((value) => String(value ?? "").replace(/"/g, '""')).map((value) => /[",\n]/.test(value) ? `"${value}"` : value).join(","))
+      .join("\n");
+    return { name: sheet.sheet, csv };
+  });
+}
+
 export async function parseFileToText(
   buffer: Buffer,
   fileType: string,
@@ -37,17 +48,16 @@ export async function parseFileToText(
     return buffer.toString("utf-8");
   }
 
-  // Excel（SheetJS）：每个 sheet 转为 CSV 文本
-  if (type.includes("xls") || type.includes("sheet")) {
-    const XLSX = await import("xlsx");
-    const wb = XLSX.read(buffer, { type: "buffer" });
-    const parts: string[] = [];
-    for (const name of wb.SheetNames) {
-      const csv = XLSX.utils.sheet_to_csv(wb.Sheets[name]);
-      if (csv.trim()) parts.push(wb.SheetNames.length > 1 ? `【${name}】\n${csv}` : csv);
-    }
+  // Excel：只解析现代 .xlsx，避免使用已停止维护且存在安全公告的 xlsx 包。
+  if (type.includes("xlsx") || type.includes("sheet")) {
+    const sheets = await xlsxSheetsToCsv(buffer);
+    const parts = sheets
+      .filter((sheet) => sheet.csv.trim())
+      .map((sheet) => sheets.length > 1 ? `【${sheet.name}】\n${sheet.csv}` : sheet.csv);
     return parts.join("\n\n");
   }
+
+  if (type === "xls") throw new Error("旧版 .xls 文件请先另存为 .xlsx 后再上传。");
 
   // PPT（officeparser v7 返回 AST，用 toText() 取纯文本）
   if (type.includes("ppt")) {
@@ -81,6 +91,6 @@ export function extFromFileName(name: string): string {
 
 export const SUPPORTED_EXTS = [
   "md", "txt", "docx", "pdf",
-  "xlsx", "xls", "csv", "pptx",
+  "xlsx", "csv", "pptx",
   "jpg", "jpeg", "png", "webp",
 ];

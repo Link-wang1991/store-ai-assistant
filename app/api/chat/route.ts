@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const customerId: string | undefined =
     typeof body?.customerId === "string" && body.customerId ? body.customerId : undefined;
 
-  const jwtCtx = jwtGetAuth(req);
+  const jwtCtx = await jwtGetAuth(req);
   if (!jwtCtx) return NextResponse.json({ error: "未登录" }, { status: 401 });
 
   try {

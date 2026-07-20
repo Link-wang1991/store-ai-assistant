@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { authApi } from "@/lib/api-client";
+import { Brand } from "@/components/Brand";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
@@ -39,16 +40,15 @@ export default function RegisterPage() {
 
   if (success) {
     return (
-      <div className="flex min-h-screen flex-col justify-center px-6">
-        <div className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-green-100 text-3xl">
-            ✅
-          </div>
-          <h1 className="text-xl font-bold text-slate-900">注册成功！</h1>
-          <p className="mt-2 text-sm text-slate-500">你的门店已经创建好了，现在去登录吧。</p>
+      <div className="auth-shell flex min-h-screen flex-col justify-center px-6">
+        <div className="auth-panel text-center">
+          <div className="auth-brand"><Brand title="门店 AI 经营助手" /></div>
+          <div className="auth-success-mark" aria-hidden="true">✓</div>
+          <h1 className="auth-title">注册成功</h1>
+          <p className="auth-subtitle">你的门店已经创建好了，现在去登录吧。</p>
           <a
             href="/login"
-            className="mt-6 inline-block rounded-xl bg-brand px-8 py-3 text-sm font-medium text-white"
+            className="app-primary-button mt-6 inline-flex px-8 py-3 text-sm"
           >
             去登录
           </a>
@@ -58,70 +58,69 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col justify-center px-6">
+    <div className="auth-shell flex min-h-screen flex-col justify-center px-6">
+      <div className="auth-panel">
       <div className="mb-8 text-center">
-        <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand text-3xl">
-          🏪
-        </div>
-        <h1 className="text-xl font-bold text-slate-900">创建门店账号</h1>
-        <p className="mt-1 text-sm text-slate-400">注册后自动创建门店，你就是老板</p>
+        <div className="auth-brand"><Brand title="门店 AI 经营助手" /></div>
+        <h1 className="auth-title">创建门店账号</h1>
+        <p className="auth-subtitle">注册后自动创建门店，你就是老板</p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-sm text-slate-600">姓名</label>
+          <label className="auth-label">姓名</label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="你的姓名"
-            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand"
+            className="auth-input"
             required
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm text-slate-600">邮箱</label>
+          <label className="auth-label">邮箱</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand"
+            className="auth-input"
             required
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm text-slate-600">密码</label>
+          <label className="auth-label">密码</label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="至少 6 位密码"
-            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand"
+            className="auth-input"
             required
             minLength={6}
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm text-slate-600">确认密码</label>
+          <label className="auth-label">确认密码</label>
           <input
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="再次输入密码"
-            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand"
+            className="auth-input"
             required
             minLength={6}
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm text-slate-600">门店名称（可选）</label>
+          <label className="auth-label">门店名称（可选）</label>
           <input
             type="text"
             value={storeName}
             onChange={(e) => setStoreName(e.target.value)}
             placeholder="不填则默认为「你的姓名 + 的门店」"
-            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand"
+            className="auth-input"
           />
         </div>
 
@@ -130,18 +129,19 @@ export default function RegisterPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-xl bg-brand py-3 text-sm font-medium text-white disabled:opacity-60"
+          className="app-primary-button w-full py-3 text-sm disabled:opacity-60"
         >
           {loading ? "注册中…" : "注册并创建门店"}
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-slate-400">
+      <p className="auth-footer">
         已有账号？{" "}
-        <a href="/login" className="font-medium text-brand hover:underline">
+        <a href="/login" className="font-medium text-[var(--green-dark)] hover:underline">
           去登录
         </a>
       </p>
+      </div>
     </div>
   );
 }

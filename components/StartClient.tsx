@@ -59,7 +59,7 @@ export function StartClient({
   }
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="start-client min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white px-4 py-5">
         <div className="text-xs font-medium text-teal-600">本地测试入口</div>
         <h1 className="mt-1 text-xl font-bold text-slate-950">门店 AI 经营助手 · 启动中心</h1>

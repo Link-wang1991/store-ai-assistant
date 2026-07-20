@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/auth";
 import { canEnterAdmin } from "@/lib/permissions";
 import { BottomNav, MAIN_NAV } from "@/components/BottomNav";
+import { SubpageHeader } from "@/components/SubpageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -31,24 +31,20 @@ export default async function AiSettingsPage() {
   ];
 
   return (
-    <div className="min-h-screen pb-16">
-      <header className="border-b border-[var(--line)] bg-white px-4 py-4">
-        <Link href="/me" className="text-[11px] text-[var(--green-dark)]">‹ 我的</Link>
-        <div className="mt-1 text-[18px] font-semibold tracking-tight text-slate-900">AI 模型设置</div>
-        <div className="mt-0.5 text-xs text-slate-500">门店 AI 能力的实时配置状态</div>
-      </header>
-      <div className="space-y-2 p-4">
+    <div className="subpage-shell">
+      <SubpageHeader title="AI 模型设置" description="门店 AI 能力的实时配置状态" />
+      <main className="subpage-content space-y-2">
         {items.map((it) => (
-          <div key={it.title} className="flex items-start justify-between gap-3 rounded-xl border border-[var(--line)] bg-white p-4">
-            <div className="text-sm font-medium text-slate-800">{it.title}</div>
-            <span className={`mt-0.5 shrink-0 text-[11px] ${it.ok ? "text-[var(--green-dark)]" : "text-red-500"}`}>{it.value}</span>
+          <div key={it.title} className="subpage-card flex items-start justify-between gap-3 p-4">
+            <div className="text-sm font-medium text-[var(--ink)]">{it.title}</div>
+            <span className={`mt-0.5 shrink-0 text-[11px] ${it.ok ? "text-[var(--green-dark)]" : "text-[var(--red)]"}`}>{it.value}</span>
           </div>
         ))}
-        <p className="px-0.5 pt-2 text-[11px] text-[var(--faint)]">
+        <p className="subpage-hint">
           以上为实时读取的服务器配置。切换模型 / 更换 Key 需在服务器 .env 修改（AI_PROVIDER、DEEPSEEK_API_KEY、QWEN_API_KEY），界面只读展示，避免误改导致 AI 不可用。
         </p>
-      </div>
-      <BottomNav items={MAIN_NAV} />
+      </main>
+      <BottomNav items={MAIN_NAV} activeHref="/me" />
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getToken } from "@/lib/api-client";
+import { Brand } from "@/components/Brand";
 
 const FEATURES = [
   {
@@ -73,71 +73,70 @@ export default function Home() {
   }, [router]);
 
   if (checking) {
-    return <div className="flex h-screen items-center justify-center text-sm text-slate-400">加载中…</div>;
+    return <div className="welcome-loading">加载中…</div>;
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="mx-auto max-w-md px-6 py-10">
+    <main className="welcome-page">
+      <div className="welcome-content">
         {/* 顶部身份标 */}
-        <div className="mb-6 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5">
-          <span className="text-xs font-medium text-emerald-700">专为美业门店打造的 AI 经营助手</span>
-        </div>
+        <div className="welcome-brand"><Brand title="门店 AI 经营助手" /></div>
+        <div className="welcome-eyebrow">专为美业门店打造的 AI 经营助手</div>
 
         {/* 主标题 */}
-        <h1 className="text-[32px] font-bold leading-tight tracking-tight text-slate-900">
+        <h1 className="welcome-title">
           不是管理系统，
           <br />
           而是帮门店增长的
           <br />
-          <span className="text-emerald-700">AI 经营大脑。</span>
+          <span>AI 经营大脑。</span>
         </h1>
 
         {/* 副标题 */}
-        <p className="mt-4 text-[15px] leading-relaxed text-slate-500">
+        <p className="welcome-intro">
           聚焦门店最核心的经营问题：客户成交、重点跟进、会谈复盘、销售辅导与知识沉淀。让老板看清重点，让员工立刻知道今天该做什么。
         </p>
 
         {/* 功能卡片 */}
-        <div className="mt-8 space-y-3">
+        <div className="welcome-feature-list">
           {FEATURES.map((f, idx) => (
             <div
               key={f.title}
-              className="flex items-start gap-4 rounded-2xl border border-slate-100 bg-slate-50 p-4"
+              className="welcome-feature"
               style={{ animationDelay: `${idx * 80}ms` }}
             >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+              <div className="welcome-feature-icon">
                 {f.icon}
               </div>
               <div>
-                <div className="text-[15px] font-semibold text-slate-900">{f.title}</div>
-                <div className="mt-0.5 text-[13px] text-slate-500">{f.desc}</div>
+                <div className="welcome-feature-title">{f.title}</div>
+                <div className="welcome-feature-description">{f.desc}</div>
               </div>
             </div>
           ))}
         </div>
 
         {/* 核心价值 */}
-        <div className="mt-8 flex items-center gap-2 text-sm text-slate-500">
-          <svg viewBox="0 0 24 24" className="h-4 w-4 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2">
+        <div className="welcome-value">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
           <span>核心价值：帮助门店提升成交效率、服务体验与复购增长。</span>
         </div>
 
         {/* CTA */}
-        <div className="mt-8 space-y-3">
+        <div className="welcome-actions">
           <Link
             href="/login"
-            className="flex h-12 w-full items-center justify-center rounded-xl bg-emerald-600 text-sm font-semibold text-white shadow-lg shadow-emerald-200"
+            className="app-primary-button flex h-12 w-full text-sm"
           >
             进入工作台
           </Link>
-          <p className="text-center text-xs text-slate-400">
+          <p className="welcome-footnote">
             已登录员工可直接从登录页进入 · 演示账号请联系管理员
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

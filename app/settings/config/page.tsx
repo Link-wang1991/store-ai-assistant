@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/auth";
 import { canEnterAdmin } from "@/lib/permissions";
@@ -6,6 +5,7 @@ import { db } from "@/lib/db";
 import { buildInitialConfig } from "@/lib/config-defaults";
 import { ConfigCenter } from "@/components/ConfigCenter";
 import { BottomNav, MAIN_NAV } from "@/components/BottomNav";
+import { SubpageHeader } from "@/components/SubpageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -24,16 +24,12 @@ export default async function ConfigPage() {
   const initial = buildInitialConfig(saved);
 
   return (
-    <div className="min-h-screen pb-16">
-      <header className="border-b border-[var(--line)] bg-white px-4 py-4">
-        <Link href="/me" className="text-[11px] text-[var(--green-dark)]">‹ 我的</Link>
-        <div className="mt-1 text-[18px] font-semibold tracking-tight text-slate-900">自定义配置</div>
-        <div className="mt-0.5 text-xs text-slate-500">把池名、阶段、场景、标签等改成你们门店的叫法</div>
-      </header>
-      <div className="p-4">
+    <div className="subpage-shell">
+      <SubpageHeader title="自定义配置" description="把池名、阶段、场景、标签改成你们门店的叫法" />
+      <main className="subpage-content">
         <ConfigCenter initial={initial} />
-      </div>
-      <BottomNav items={MAIN_NAV} />
+      </main>
+      <BottomNav items={MAIN_NAV} activeHref="/me" />
     </div>
   );
 }

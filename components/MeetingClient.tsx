@@ -28,6 +28,8 @@ export function MeetingClient({ myCustomers, otherCustomers, onRefresh }: {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
   const [scenes, setScenes] = useState<SceneOption[]>([]);
+  const [consented, setConsented] = useState(true);
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
 
   useEffect(() => {
     const t = getToken();
@@ -41,6 +43,16 @@ export function MeetingClient({ myCustomers, otherCustomers, onRefresh }: {
     }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!customerId && !isNewCustomer) {
+      const first = myCustomers[0] || otherCustomers[0];
+      if (first) {
+        setCustomerId(first.id);
+        setCustomerName(first.name);
+      }
+    }
+  }, [myCustomers, otherCustomers, customerId, isNewCustomer]);
+
   const filteredMy = useMemo(() => {
     if (!searchTerm) return myCustomers;
     const q = searchTerm.toLowerCase();
@@ -53,41 +65,13 @@ export function MeetingClient({ myCustomers, otherCustomers, onRefresh }: {
     return otherCustomers.filter((c) => c.name.toLowerCase().includes(q));
   }, [otherCustomers, searchTerm]);
 
-  // 正在录音中 → 显示紧凑录音指示条，不遮挡会谈列表
-  if (isRecording) {
-    return (
-      <div className="px-4 pb-2 pt-3">
-        <div className="flex items-center justify-between rounded-xl border border-[var(--green)] bg-[var(--green-soft)] px-3 py-2">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--green)]" />
-            <span className="text-[13px] font-mono font-bold text-[var(--ink)]">{timer}</span>
-            <span className="text-[11px] text-[var(--faint)]">{isStopping ? "上传中…" : isPaused ? "已暂停" : "录音中"}</span>
-          </div>
-          {!isStopping && (
-            <div className="flex items-center gap-2">
-              <button onClick={() => { isPaused ? resumeRecording() : pauseRecording(); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[var(--yellow)] shadow-sm active:scale-90 transition">
-                {isPaused ? (
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-                )}
-              </button>
-              <button onClick={() => { if (!isStopping) stopRecording(); }} className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white shadow-sm active:scale-90 transition">
-                <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   async function startMeeting() {
     if (starting) return;
     setStarting(true);
     setError("");
 
     try {
+      if (!consented) { setError("请先确认已向客户告知并获得同意"); setStarting(false); return; }
       if (!isNewCustomer && !customerId) { setError("请选择客户"); setStarting(false); return; }
 
       const result = await startRecording({
@@ -107,70 +91,86 @@ export function MeetingClient({ myCustomers, otherCustomers, onRefresh }: {
     }
   }
 
-  // ── setup 表单 ──
+  const allCustomers = [...myCustomers, ...otherCustomers];
+  const selected = allCustomers.find((c) => c.id === customerId);
+  const sceneOptions = scenes.length ? scenes : [
+    { code: "new_consult", display_name: "新客咨询", sort_order: 1 },
+    { code: "service", display_name: "护理服务", sort_order: 2 },
+    { code: "deal", display_name: "成交沟通", sort_order: 3 },
+    { code: "repurchase", display_name: "复购回访", sort_order: 4 },
+  ];
+
   return (
-    <div className="px-4 pb-2 pt-3">
-      <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
-        <h3 className="text-[14px] font-semibold text-[var(--ink)]">快速录音</h3>
-        <p className="mt-0.5 text-[11px] text-[var(--faint)]">选好场景，点「开始」即可录制</p>
-
-        {/* 新老切换 */}
-        <div className="mt-3 flex gap-1 rounded-lg bg-[var(--page)] p-0.5">
-          <button onClick={() => { setIsNewCustomer(true); setCustomerId(""); if (scenes.length) setScene(scenes[0].code); }} className={`flex-1 rounded-md py-1.5 text-[12px] font-medium transition ${isNewCustomer ? "bg-white text-[var(--ink)] shadow-sm" : "text-[var(--muted)]"}`}>新客户</button>
-          <button onClick={() => { setIsNewCustomer(false); setScene("repurchase"); }} className={`flex-1 rounded-md py-1.5 text-[12px] font-medium transition ${!isNewCustomer ? "bg-white text-[var(--ink)] shadow-sm" : "text-[var(--muted)]"}`}>老客户</button>
+    <div className="px-4 pb-1 pt-5">
+      {isRecording && (
+        <div className="ref-card mb-4 flex items-center justify-between border-[#cfe9d7] bg-[#fbfffc] px-3 py-2.5">
+          <div className="flex items-center gap-3"><span className="relative flex h-8 w-8 items-center justify-center"><span className="absolute h-7 w-7 animate-ping rounded-full bg-red-400/25"/><span className="h-2.5 w-2.5 rounded-full bg-red-500"/></span><div><b className="block text-[12px] text-[#263128]">{isStopping ? "正在上传录音" : isPaused ? "录音已暂停" : "录音中"}</b><span className="text-[11px] font-bold text-red-500">{timer}</span></div></div>
+          {!isStopping && <div className="flex gap-2"><button onClick={() => { isPaused ? resumeRecording() : pauseRecording(); }} className="ref-secondary h-8 min-h-0 px-2.5">{isPaused ? "继续" : "暂停"}</button><button onClick={stopRecording} className="h-8 rounded-full bg-red-500 px-3 text-[11px] font-bold text-white">结束</button></div>}
         </div>
-
-        <div className="mt-3 space-y-3">
-          {isNewCustomer ? (
-            <div>
-              <label className="text-[12px] font-medium text-[var(--muted)]">客户姓名</label>
-              <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="输入客户姓名（留空自动生成）" className="mt-1 w-full rounded-xl border border-[var(--line)] bg-[var(--page)] px-3 py-2.5 text-[13px] outline-none focus:border-[var(--green)]" />
-            </div>
-          ) : (
-            <div>
-              <label className="text-[12px] font-medium text-[var(--muted)]">选择客户</label>
-              <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="搜索客户名" className="mt-1 w-full rounded-xl border border-[var(--line)] bg-[var(--page)] px-3 py-2.5 text-[13px] outline-none focus:border-[var(--green)]" />
-              {filteredMy.length > 0 && (
-                <div className="mt-2">
-                  <p className="mb-1 text-[10px] text-[var(--faint)]">我负责的</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {filteredMy.map((c) => (
-                      <button key={c.id} onClick={() => { setCustomerId(c.id); setCustomerName(c.name); }} className={`rounded-full border px-2.5 py-1 text-[11px] transition ${customerId === c.id ? "border-[var(--green)] bg-[var(--green-soft)] text-[var(--green-dark)] font-medium" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>{c.name}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {filteredOthers.length > 0 && (
-                <div className="mt-2">
-                  <p className="mb-1 text-[10px] text-[var(--faint)]">其他员工</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {filteredOthers.map((c) => (
-                      <button key={c.id} onClick={() => { setCustomerId(c.id); setCustomerName(c.name); }} className={`rounded-full border px-2.5 py-1 text-[11px] transition ${customerId === c.id ? "border-[var(--green)] bg-[var(--green-soft)] text-[var(--green-dark)] font-medium" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>{c.name}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+      )}
+      <section>
+        <div className="mb-3 flex items-center justify-between"><h2 className="ref-section-title">快速会谈设置</h2></div>
+        <div className="ref-card ref-recording-card">
+          <div><label className="ref-eyebrow block">客户类型</label><div className="ref-recording-kind mt-2"><button onClick={() => { setIsNewCustomer(true); setCustomerId(""); setCustomerName(""); setCustomerPickerOpen(false); setScene(sceneOptions[0].code); }} className={isNewCustomer ? "active" : ""}>新客户</button><button onClick={() => { setIsNewCustomer(false); setCustomerPickerOpen(false); setScene("repurchase"); }} className={!isNewCustomer ? "active" : ""}>已有客户</button></div></div>
 
           <div>
-            <label className="text-[12px] font-medium text-[var(--muted)]">咨询场景</label>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              {scenes.map((s) => (
-                <button key={s.code} onClick={() => setScene(s.code)} className={`rounded-full border px-2.5 py-1 text-[11px] transition ${scene === s.code ? "border-[var(--green)] bg-[var(--green-soft)] text-[var(--green-dark)] font-medium" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>{s.display_name}</button>
-              ))}
-            </div>
+            <label className="ref-eyebrow block">选择客户</label>
+            {isNewCustomer ? (
+              <div className="mt-2">
+                <div className="ref-customer-picker">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="ref-customer-avatar">{customerName?.slice(0, 1) || "新"}</span>
+                    <div className="min-w-0">
+                      <b className="block truncate text-[13px] text-[#263128]">{customerName || "新客户"}</b>
+                      <span className="mt-1 block text-[11px] text-[#748077]">本次会谈结束后将创建客户档案</span>
+                    </div>
+                  </div>
+                </div>
+                <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="输入客户姓名（留空自动生成）" className="ref-field mt-2" />
+              </div>
+            ) : (
+              <div className="mt-2">
+                <button type="button" onClick={() => setCustomerPickerOpen((open) => !open)} className="ref-customer-picker" aria-expanded={customerPickerOpen}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="ref-customer-avatar">{selected?.name?.slice(0, 1) || "客"}</span>
+                    <div className="min-w-0">
+                      <b className="block truncate text-[13px] text-[#263128]">{selected?.name || "请选择已有客户"}</b>
+                      <span className="mt-1 block text-[11px] text-[#748077]">{selected ? "已关联客户画像与历史" : "点击选择负责客户"}</span>
+                    </div>
+                  </div>
+                  <PickerChevron open={customerPickerOpen} />
+                </button>
+                {customerPickerOpen && (
+                  <div className="mt-2">
+                    <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="搜索客户姓名" className="ref-field" />
+                    <div className="mt-2 flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
+                      {[...filteredMy, ...filteredOthers].map((c) => (
+                        <button key={c.id} onClick={() => { setCustomerId(c.id); setCustomerName(c.name); setCustomerPickerOpen(false); }} className={`ref-chip ${customerId === c.id ? "active" : ""}`}>
+                          {c.name}
+                        </button>
+                      ))}
+                      {filteredMy.length + filteredOthers.length === 0 && <span className="ref-muted">没有找到客户</span>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        </div>
 
-        {error && <p className="mt-2 text-[12px] text-red-500">{error}</p>}
-
-        <div className="mt-4 flex justify-center">
-          <button onClick={startMeeting} disabled={starting} className="rounded-full bg-[var(--green)] px-7 py-2.5 text-[14px] font-medium text-white shadow-sm disabled:opacity-50">
-            {starting ? "准备中…" : "开始录音"}
-          </button>
+          <div><label className="ref-eyebrow block">会谈场景</label><div className="ref-scene-wrap mt-2">{sceneOptions.map((s) => <button key={s.code} onClick={() => setScene(s.code)} className={`ref-chip ${scene === s.code ? "active" : ""}`}>{s.display_name}</button>)}</div></div>
+          <label className="ref-consent"><input checked={consented} onChange={(e) => setConsented(e.target.checked)} type="checkbox" />已向客户告知并获得同意</label>
+          {error && <p className="-mt-2 text-[12px] text-[#d84436]">{error}</p>}
+          <button onClick={startMeeting} disabled={starting || isRecording} className="ref-primary min-h-[52px] w-full gap-2 text-[15px]"><svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17v4M8.5 21h7"/></svg>{starting ? "准备中…" : isRecording ? "会谈进行中" : "开始录音会谈"}</button>
         </div>
-      </div>
+      </section>
     </div>
+  );
+}
+
+function PickerChevron({ open }: { open: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" className={`h-4 w-4 shrink-0 text-[#77847b] transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m7 10 5 5 5-5" />
+    </svg>
   );
 }

@@ -5,9 +5,9 @@
 
 import { cookies } from "next/headers";
 
-export function readServerToken(): string | null {
+export async function readServerToken(): Promise<string | null> {
   try {
-    const store = cookies();
+    const store = await cookies();
     return store.get("store_ai_token")?.value ?? null;
   } catch {
     return null;

@@ -12,9 +12,11 @@ import { MAIN_NAV } from "@/components/BottomNav";
 import { SCENE_LABEL } from "@/lib/scenes";
 import { fmtTime } from "@/lib/format";
 import { decodeJwtPayload } from "@/lib/jwt";
+import { Brand } from "@/components/Brand";
+import { AppLoading } from "@/components/AppLoading";
 
 const STATUS_LABEL: Record<string, string> = {
-  recording: "录音中", uploaded: "已上传", transcribing: "转写中", analyzing: "分析中", done: "已完成", failed: "失败",
+  recording: "录音中", queued: "排队提交", submitting: "提交转写中", uploaded: "已上传", transcribing: "转写中", analyzing: "分析中", done: "已完成", failed: "失败",
 };
 
 export default function MeetingPage() {
@@ -82,48 +84,47 @@ export default function MeetingPage() {
     }
   };
 
-  if (loading) return <div className="flex h-screen items-center justify-center text-sm text-slate-400">加载中…</div>;
+  if (loading) return <AppLoading label="正在整理会谈记录…" />;
 
   const isAdmin = isAdminRole(role);
   const nav = isAdmin ? MAIN_NAV : STAFF_NAV;
 
   return (
-    <div className="min-h-screen bg-[var(--page)] pb-20">
-
-      {/* 顶部栏 */}
-      <div className="sticky top-0 z-30 bg-white border-b border-[var(--line)] px-4 py-3">
-        <div className="relative flex items-center justify-center">
-          <button onClick={() => router.push("/home")} className="absolute left-0 flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--ink)] text-[15px] font-bold hover:bg-[var(--line)] transition">←</button>
-          <span className="text-[15px] font-semibold text-[var(--ink)]">会谈</span>
-        </div>
-      </div>
+    <div className="ref-app">
+      <div className="ref-canvas">
+      <header className="ref-topbar">
+        <Brand />
+        <button onClick={() => router.push("/customers")} className="ref-icon-button" aria-label="搜索客户"><svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.2-4.2"/></svg></button>
+      </header>
 
       {/* 录音区 */}
       <MeetingClient myCustomers={myCustomers} otherCustomers={otherCustomers} />
 
       {/* 会谈记录列表 */}
-      <div className="px-4 pb-4">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-[15px] font-semibold text-[var(--ink)]">我的会谈记录</h2>
-          <span className="text-[11px] text-[var(--faint)]">共 {myMeetings.length} 条</span>
+      <section className="px-4 pb-4 pt-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="ref-section-title">近期会谈记录</h2>
+          <span className="text-[12px] font-semibold text-[#718077]">共 {myMeetings.length} 条</span>
         </div>
         {myMeetings.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-[var(--line)] bg-white px-4 py-10 text-center">
-            <p className="text-[13px] text-[var(--faint)]">还没有会谈记录</p>
-            <p className="mt-1 text-[11px] text-[var(--faint)]">上方选好客户和场景，点「开始会谈记录」</p>
+          <div className="ref-empty">
+            <p>还没有会谈记录</p>
+            <p className="mt-1 text-[11px]">上方选好客户和场景，点「开始录音会谈」</p>
           </div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {myMeetings.map((m) => (
               <SwipeableItem key={m.id} onDelete={() => handleDelete(m.id, m.customer_id || m.customerId, m.customer_records?.name || m.customerName || m.customer_name)}>
                 <Link
                   href={`/meeting/${m.id}`}
-                  className="block rounded-2xl border border-[var(--line)] bg-white p-3.5 transition"
+                  className="ref-card ref-history-card ref-card-lift block"
                 >
-                  <div className="flex items-center justify-between">
+                  <span className={`ref-history-icon ${m.status === "done" ? "green" : m.status === "failed" ? "red" : m.status === "analyzing" ? "purple" : "gold"}`} aria-hidden="true"><MeetingStatusIcon status={m.status} /></span>
+                  <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-[var(--green)]" />
-                      <span className="text-[14px] font-medium text-[var(--ink)]">
+                      <span className="w-2 h-2 rounded-full bg-[#078a4c]" />
+                      <span className="ref-history-title truncate">
                         {editMeetingId === m.id ? (
                           <span className="relative inline-block">
                             <input value={editName} onChange={e => setEditName(e.target.value)}
@@ -186,40 +187,51 @@ export default function MeetingPage() {
                           </button>
                         )}
                       </span>
-                      <span className="rounded-md bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">
+                      <span className="rounded-md bg-[#f1f5f1] px-1.5 py-0.5 text-[10px] text-[#68756c]">
                         {SCENE_LABEL[m.scene] || m.scene}
                       </span>
                     </div>
-                    <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium ${
-                      m.status === "done" ? "bg-[var(--green-soft)] text-[var(--green-dark)]" :
-                      m.status === "failed" ? "bg-[var(--red-soft)] text-[var(--red)]" :
-                      "bg-[var(--yellow-soft)] text-[var(--yellow)]"
+                    <span className={`ref-status ${
+                      m.status === "done" ? "ref-status-green" :
+                      m.status === "failed" ? "ref-status-red" :
+                      m.status === "analyzing" ? "ref-status-purple" : "ref-status-yellow"
                     }`}>
                       {STATUS_LABEL[m.status] || m.status}
                     </span>
                     {m.status === "done" && typeof (m.quality_score ?? m.qualityScore) === "number" && (
-                      <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--ink)]">
-                        ★ {m.quality_score ?? m.qualityScore}
+                      <span className="ref-status ref-status-blue">
+                        质量分 {m.quality_score ?? m.qualityScore}
                       </span>
                     )}
                   </div>
                   {m.status === "failed" && m.fail_reason && (
-                    <p className="mt-1.5 text-[11px] text-[var(--red)] leading-relaxed">{m.fail_reason}</p>
+                    <p className="mt-2 text-[11px] leading-relaxed text-[#d84436]">{m.fail_reason}</p>
                   )}
-                  <div className="mt-1.5 flex items-center gap-2 text-[11px] text-[var(--faint)]">
+                  <div className="ref-history-meta">
                     <span>{fmtTime(m.created_at)}</span>
-                    {empName && <span>· {empName}</span>}
+                    {empName && <span>• {empName}</span>}
+                  </div>
+                  {m.status === "analyzing" && <div className="ref-progress"><i style={{ width: "66%" }} /></div>}
                   </div>
                 </Link>
               </SwipeableItem>
             ))}
           </div>
         )}
-      </div>
+      </section>
 
       <BottomNav items={nav} />
+      </div>
     </div>
   );
+}
+
+function MeetingStatusIcon({ status }: { status: string }) {
+  const common = { viewBox: "0 0 24 24", className: "h-5 w-5", fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (status === "done") return <svg {...common}><circle cx="12" cy="12" r="8" /><path d="m8.4 12.1 2.3 2.4 5-5.2" /></svg>;
+  if (status === "failed") return <svg {...common}><path d="m12 3 9 17H3L12 3Z" /><path d="M12 9v4M12 16h.01" /></svg>;
+  if (status === "analyzing") return <svg {...common}><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /><circle cx="12" cy="12" r="3.5" /></svg>;
+  return <svg {...common}><path d="M8 3h8M8 21h8" /><path d="M8 3c0 4 3 4.5 4 6 1 1.5 4 2 4 6M16 3c0 4-3 4.5-4 6-1 1.5-4 2-4 6" /></svg>;
 }
 
 /** 左滑显示删除按钮 */

@@ -11,12 +11,13 @@ export function MeetingProcessing({ id, initialStatus }: { id: string; initialSt
   const router = useRouter();
   const [status, setStatus] = useState(initialStatus);
   const [error, setError] = useState("");
+  const [networkFailures, setNetworkFailures] = useState(0);
 
   useEffect(() => {
     let stop = false;
     (async () => {
-      for (let i = 0; i < 240 && !stop; i++) {
-        await new Promise((r) => setTimeout(r, Math.min(4000 + i * 300, 12000)));
+      for (let i = 0; i < 180 && !stop; i++) {
+        await new Promise((r) => setTimeout(r, Math.min(3000 + i * 250, 10000)));
         try {
           const res = await fetchWithRetry(`/api/meeting/${id}/status`, {
             retries: 2,
@@ -24,10 +25,15 @@ export function MeetingProcessing({ id, initialStatus }: { id: string; initialSt
           });
           const d = await readJson(res);
           if (d.status) setStatus(d.status);
+          setNetworkFailures(0);
           if (d.status === "done") { router.refresh(); return; }
           if (d.status === "failed") { setError(d.error || "处理失败"); return; }
         } catch {
-          // 网络抖动，继续
+          setNetworkFailures((count) => {
+            const next = count + 1;
+            if (next >= 3) setError("暂时无法获取处理进度，请检查网络后刷新页面。");
+            return next;
+          });
         }
       }
     })();
@@ -52,7 +58,7 @@ export function MeetingProcessing({ id, initialStatus }: { id: string; initialSt
         <>
           <div className="mb-3 h-9 w-9 animate-spin rounded-full border-2 border-brand border-t-transparent" />
           <p className="text-sm font-medium text-slate-700">{label}</p>
-          <p className="mt-1 text-xs text-slate-400">完成后会自动显示报告，可停留在此页等待</p>
+          <p className="mt-1 text-xs text-slate-400">{status === "queued" ? "录音已保存，正在排队提交语音识别任务…" : status === "submitting" ? "正在安全提交转写任务…" : "完成后会自动显示报告，可停留在此页等待"}</p>
         </>
       )}
     </div>

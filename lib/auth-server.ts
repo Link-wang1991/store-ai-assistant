@@ -18,7 +18,7 @@ export interface ApiAuthContext {
  */
 export async function getApiAuth(): Promise<ApiAuthContext | null> {
   try {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const token = cookieStore.get("store_ai_token")?.value;
     if (!token) return null;
 

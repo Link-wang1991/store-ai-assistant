@@ -28,7 +28,7 @@ export function getToken(): string | null {
 export async function getServerToken(): Promise<string | null> {
   try {
     const { cookies } = await import("next/headers");
-    const store = cookies();
+    const store = await cookies();
     return store.get("store_ai_token")?.value ?? null;
   } catch {
     return null;

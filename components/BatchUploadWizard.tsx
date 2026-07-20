@@ -80,7 +80,7 @@ export function BatchUploadWizard({
   const inputCls = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand";
 
   return (
-    <div className="space-y-3">
+    <div className="batch-upload-wizard space-y-3">
       <div>
         <label className="mb-1 block text-xs text-slate-500">
           选择文件 *（可多选，AI 会自动判分类，最大 25MB/个）

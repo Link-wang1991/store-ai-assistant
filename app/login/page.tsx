@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Brand } from "@/components/Brand";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -34,35 +35,34 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col justify-center px-6">
+    <div className="auth-shell flex min-h-screen flex-col justify-center px-6">
+      <div className="auth-panel">
       <div className="mb-8 text-center">
-        <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand text-3xl">
-          🏪
-        </div>
-        <h1 className="text-xl font-bold text-slate-900">门店 AI 经营助手</h1>
-        <p className="mt-1 text-sm text-slate-400">员工工作指导 · 老板经营管理</p>
+        <div className="auth-brand"><Brand title="门店 AI 经营助手" /></div>
+        <h1 className="auth-title">欢迎回来</h1>
+        <p className="auth-subtitle">员工工作指导 · 老板经营管理</p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-sm text-slate-600">登录邮箱</label>
+          <label className="auth-label">登录邮箱</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand"
+            className="auth-input"
             required
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm text-slate-600">密码</label>
+          <label className="auth-label">密码</label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="请输入密码"
-            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand"
+            className="auth-input"
             required
           />
         </div>
@@ -70,18 +70,19 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-xl bg-brand py-3 text-sm font-medium text-white disabled:opacity-60"
+          className="app-primary-button w-full py-3 text-sm disabled:opacity-60"
         >
           {loading ? "登录中…" : "登录"}
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-slate-400">
+      <p className="auth-footer">
         还没有账号？{" "}
-        <a href="/register" className="font-medium text-brand hover:underline">
+        <a href="/register" className="font-medium text-[var(--green-dark)] hover:underline">
           立即注册
         </a>
       </p>
+      </div>
     </div>
   );
 }

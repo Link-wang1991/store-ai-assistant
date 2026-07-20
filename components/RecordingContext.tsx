@@ -23,6 +23,8 @@ let streamRef: MediaStream | null = null;
 let chunksRef: Blob[] = [];
 let timerInterval: ReturnType<typeof setInterval> | null = null;
 let elapsed = 0;
+const MAX_AUDIO_BYTES = 60 * 1024 * 1024;
+const MIN_AUDIO_BYTES = 1024;
 
 function notify() { listeners.forEach(l => l()); }
 function getSnap() { return storeState; }
@@ -35,6 +37,29 @@ function cleanupStore() {
   notify();
 }
 
+function recordingError(error: unknown) {
+  const name = error instanceof DOMException ? error.name : "";
+  if (name === "NotAllowedError" || name === "SecurityError") return "麦克风权限未开启。请在浏览器地址栏允许麦克风访问后重试。";
+  if (name === "NotFoundError") return "未检测到可用麦克风。请检查设备后重试。";
+  if (name === "NotReadableError") return "麦克风正被其他应用占用。请关闭其他录音/通话应用后重试。";
+  return error instanceof Error && error.message ? error.message : "录音启动失败，请稍后重试。";
+}
+
+async function markUploadFailed(meetingId: string, reason: string) {
+  const token = getToken();
+  await fetch(`${API_BASE_URL}/api/meetings/${meetingId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ status: "failed", transcript_status: "failed", fail_reason: reason.slice(0, 240) }),
+  }).catch(() => {});
+}
+
+function preferredRecorderOptions(stream: MediaStream): MediaRecorderOptions | undefined {
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+  const mimeType = candidates.find((value) => MediaRecorder.isTypeSupported(value));
+  return mimeType ? { mimeType, audioBitsPerSecond: 64_000 } : undefined;
+}
+
 function makeOnStop(mid: string, router: any) {
   return async () => {
     storeState = { ...storeState, isStopping: true };
@@ -43,14 +68,30 @@ function makeOnStop(mid: string, router: any) {
     if (timerInterval) clearInterval(timerInterval);
 
     const blob = new Blob(chunksRef, { type: mrRef?.mimeType || "audio/webm" });
-    const ext = audioExt(blob.type);
-    const form = new FormData();
-    form.append("file", blob, `meeting-${mid}.${ext}`);
-    form.append("duration", String(elapsed));
-    try { await fetch(`/api/meeting/${mid}/audio`, { method: "POST", body: form }); } catch {}
+    let uploadError = "";
+    try {
+      if (blob.size < MIN_AUDIO_BYTES) throw new Error("录音内容过短或没有采集到声音，请重新录音。");
+      if (blob.size > MAX_AUDIO_BYTES) throw new Error("录音文件超过 60MB，请缩短本次会谈后重新录音。");
 
-    cleanupStore();
-    router.push(`/meeting/${mid}`);
+      const ext = audioExt(blob.type);
+      const form = new FormData();
+      form.append("file", blob, `meeting-${mid}.${ext}`);
+      form.append("duration", String(elapsed));
+      const token = getToken();
+      const response = await fetch(`${API_BASE_URL}/api/meetings/${mid}/audio`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: form,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.code !== 200) throw new Error(payload.message || "录音上传失败，请检查网络后重试。");
+    } catch (error) {
+      uploadError = error instanceof Error ? error.message : "录音上传失败，请稍后重试。";
+      await markUploadFailed(mid, uploadError);
+    } finally {
+      cleanupStore();
+      router.push(`/meeting/${mid}${uploadError ? `?uploadError=${encodeURIComponent(uploadError)}` : ""}`);
+    }
   };
 }
 
@@ -67,24 +108,33 @@ async function doStartRecording(opts: { isNewCustomer: boolean; customerId: stri
       ? (() => { const now = new Date(); const p = (n: number) => String(n).padStart(2, "0"); return `新客户 ${p(now.getMonth()+1)}-${p(now.getDate())} ${p(now.getHours())}:${p(now.getMinutes())}`; })()
       : customerName.trim();
 
-    const createRes = await fetch("/api/meeting", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+    const createRes = await fetch(`${API_BASE_URL}/api/meetings`, {
+      method: "POST", headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
       body: JSON.stringify({ customerId: isNewCustomer ? "" : customerId, customerName: effectiveName, scene, consent: true }),
     });
     const createData = await createRes.json();
-    if (!createRes.ok) throw new Error(createData.error || "创建会谈失败");
-    const mid = createData.meetingId;
+    if (!createRes.ok || createData.code !== 200) throw new Error(createData.message || "创建会谈失败");
+    const mid = createData.data?.id;
+    if (!mid) throw new Error("创建会谈失败，请重试。");
 
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+      });
+    } catch (error) {
+      await markUploadFailed(mid, recordingError(error));
+      throw new Error(recordingError(error));
+    }
     streamRef = stream;
-    const mr = new MediaRecorder(stream);
+    const mr = new MediaRecorder(stream, preferredRecorderOptions(stream));
     mrRef = mr;
     chunksRef = [];
     elapsed = 0;
 
     mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.push(e.data); };
     mr.onstop = makeOnStop(mid, router);
-    mr.start(1000);
+    mr.start(5000);
 
     timerInterval = setInterval(() => {
       elapsed++;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { API_BASE_URL } from "@/lib/data-source";
@@ -12,11 +12,10 @@ import { useRecording } from "@/components/RecordingContext";
 import { isAdminRole } from "@/lib/constants";
 import { SCENE_LABEL } from "@/lib/scenes";
 import { fmtTime } from "@/lib/format";
-import { retryMeetingTranscription } from "@/lib/actions";
 import { decodeJwtPayload } from "@/lib/jwt";
 
 const STATUS_LABEL: Record<string, string> = {
-  recording: "录音中", uploaded: "已上传待处理", transcribing: "转写中", analyzing: "AI 分析中", done: "已完成", failed: "处理失败",
+  recording: "录音中", queued: "已保存，等待提交", submitting: "正在提交转写", uploaded: "已上传待处理", transcribing: "转写中", analyzing: "AI 分析中", done: "已完成", failed: "处理失败",
 };
 const ROLE_LABEL: Record<string, string> = {
   employee: "员工", customer: "客户", manager: "店长", other: "其他",
@@ -64,6 +63,21 @@ function scoreColor(v: number): string {
   if (v >= 80) return "var(--green)";
   if (v >= 60) return "var(--yellow)";
   return "var(--red)";
+}
+
+function transcriptSpeaker(t: { speaker_role?: string; speaker?: string }): string {
+  const value = t.speaker_role || t.speaker || "";
+  if (ROLE_LABEL[value]) return ROLE_LABEL[value];
+  const match = /^speaker_(\d+)$/.exec(value);
+  return match ? `说话人 ${Number(match[1]) + 1}` : value || "未区分说话人";
+}
+
+function transcriptTime(seconds: unknown): string {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value < 0) return "--:--";
+  const minute = Math.floor(value / 60);
+  const second = Math.floor(value % 60);
+  return `${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`;
 }
 
 function QualityScoreCard({ score, dims }: { score: number; dims: { label: string; value: number }[] }) {
@@ -119,7 +133,8 @@ function apiCall<T>(path: string): Promise<{ ok: boolean; data?: T }> {
     .then(j => ({ ok: j.code === 200, data: j.data }));
 }
 
-export default function MeetingReportPage({ params }: { params: { id: string } }) {
+export default function MeetingReportPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id: meetingId } = use(params);
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -138,7 +153,7 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [tab, setTab] = useState<"analysis" | "deep_review" | "distill" | "transcript">("analysis");
   const { isRecording, isPaused, isStopping, timer, pauseRecording, resumeRecording, stopRecording, meetingId: recMeetingId } = useRecording();
-  const isCurrentRecording = isRecording && recMeetingId === params.id;
+  const isCurrentRecording = isRecording && recMeetingId === meetingId;
 
   useEffect(() => {
     const t = getToken();
@@ -151,7 +166,7 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
     setIsAdmin(isAdminRole(r));
     setEmployeeName(p.name || "");
 
-    const bid = params.id;
+    const bid = meetingId;
     Promise.allSettled([
       apiCall<any>(`/api/meetings/${bid}`),
       apiCall<any>(`/api/meetings/${bid}/analysis`),
@@ -167,7 +182,7 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
       if (tr.status === "fulfilled" && tr.value?.ok && Array.isArray(tr.value.data)) setTrans(tr.value.data);
       setLoading(false);
     });
-  }, [router, params.id]);
+  }, [router, meetingId]);
 
   if (loading) return (
     <div className="flex h-screen items-center justify-center bg-[var(--page)]">
@@ -194,8 +209,12 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
     if (retrying) return;
     setRetrying(true);
     try {
-      const res = await retryMeetingTranscription(params.id);
-      if (res.ok) {
+      const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}/retry-transcription`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const res = await response.json().catch(() => ({}));
+      if (response.ok && res.code === 200) {
         router.refresh();
       } else {
         alert(res.message || "重新提交转写失败");
@@ -296,7 +315,7 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
               />
               <span className="text-[10px] text-[var(--faint)]">点击可编辑或绑定已有客户</span>
               {editingCustomer && (
-                <div className="absolute left-0 top-full z-10 mt-2 w-80 rounded-2xl border border-[var(--line)] bg-white p-4 shadow-xl">
+                <div className="meeting-customer-popover absolute left-0 top-full z-10 mt-2 rounded-2xl border border-[var(--line)] bg-white p-4 shadow-xl">
                   <h3 className="mb-3 text-[13px] font-semibold text-[var(--ink)]">编辑客户信息</h3>
                   <div className="space-y-2.5">
                     <input value={editName} onChange={e => setEditName(e.target.value)}
@@ -315,7 +334,7 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
                             <button key={c.id} onClick={async () => {
                               setSavingCustomer(true);
                               try {
-                                await fetch(`${API_BASE_URL}/api/meetings/${params.id}`, {
+                                await fetch(`${API_BASE_URL}/api/meetings/${meetingId}`, {
                                   method: "PATCH",
                                   headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
                                   body: JSON.stringify({ customer_id: c.id }),
@@ -359,9 +378,9 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
       {/* 分析卡片 */}
       <div className="mx-4 mt-4">
         {m.status !== "done" ? (
-          m.status === "transcribing" || m.status === "analyzing" ? (
+          ["queued", "submitting", "transcribing", "analyzing"].includes(m.status) ? (
             <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
-              <MeetingProcessing id={params.id} initialStatus={m.status} />
+              <MeetingProcessing id={meetingId} initialStatus={m.status} />
               {m.status === "transcribing" && !m.asr_task_id && (
                 <div className="mt-4 border-t border-[var(--line)] pt-3 text-center">
                   <button
@@ -381,7 +400,8 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
                 <p>当前状态：{STATUS_LABEL[m.status] || m.status}。</p>
                 {m.status === "failed" ? (
                   <>
-                    <p className="mt-1">转写未能识别到有效语音，建议重新录制一段。</p>
+                    <p className="mt-1">{m.fail_reason || "转写未能识别到有效语音，建议重新录制一段。"}</p>
+                    {m.audio_url && <button onClick={handleRetryTranscription} disabled={retrying} className="mt-2 mr-2 rounded-full border border-[var(--green)] px-4 py-1.5 text-[12px] font-medium text-[var(--green)] disabled:opacity-50">{retrying ? "提交中…" : "重新提交转写"}</button>}
                     <Link href="/meeting" className="mt-2 inline-block rounded-full bg-[var(--green)] px-4 py-1.5 text-[12px] font-medium text-white">去重新录音</Link>
                   </>
                 ) : m.status === "recording" ? (
@@ -425,7 +445,7 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
               <div className="mt-3 rounded-2xl border border-[var(--green)]/20 bg-[var(--green-soft)]/40 p-4">
                 <div className="mb-2 text-[14px] font-semibold text-[var(--green-dark)]">下一步跟进</div>
                 {analysis.followup_goal && <div className="mb-2"><div className="text-[11px] text-[var(--faint)]">跟进目标</div><div className="text-[13px] leading-relaxed text-[var(--muted)]">{clean(analysis.followup_goal)}</div></div>}
-                {analysis.suggested_script && <div><div className="text-[11px] text-[var(--faint)]">建议话术</div><div className="rounded-xl bg-white p-3 mt-1 text-[13px] leading-relaxed text-[var(--ink)]">{clean(analysis.suggested_script)}</div></div>}
+                {analysis.suggested_script && <div><div className="text-[11px] text-[var(--faint)]">建议话术</div><div className="detail-inner-surface mt-1 p-3 text-[13px] leading-relaxed text-[var(--ink)]">{clean(analysis.suggested_script)}</div></div>}
               </div>
             )}
           </>
@@ -460,12 +480,24 @@ export default function MeetingReportPage({ params }: { params: { id: string } }
       {/* 记录详情 Tab */}
       {tab === "transcript" && (<>
       {trans.length > 0 ? (<section id="transcript" className="mx-4 mt-4">
-          <h2 className="mb-2 text-[15px] font-semibold text-[var(--ink)]">录音转写（完整对话）</h2>
+          <div className="mb-3 rounded-2xl border border-[var(--green-light)] bg-[var(--green-soft)] p-3.5">
+            <h2 className="text-[15px] font-semibold text-[var(--ink)]">逐字转写原文</h2>
+            <p className="mt-1 text-[12px] leading-relaxed text-[var(--muted)]">以下内容按录音时间顺序保存，未经过 AI 总结或改写；分析报告基于这些原文生成。</p>
+            {m.audio_url && (
+              <div className="detail-inner-surface mt-3 p-2.5">
+                <div className="mb-1.5 text-[11px] font-medium text-[var(--muted)]">原始录音</div>
+                <audio controls preload="metadata" className="h-9 w-full" src={`/api/meeting/${meetingId}/audio`}>
+                  当前浏览器不支持录音播放。
+                </audio>
+              </div>
+            )}
+          </div>
           <div className="space-y-2">
             {trans.map((t: any) => (
               <div key={t.id} className="rounded-2xl border border-[var(--line)] bg-white p-3.5">
-                <div className="mb-0.5 text-[11px] font-medium text-[var(--green)]">
-                  {ROLE_LABEL[t.speaker_role] || t.speaker_role || t.speaker}
+                <div className="mb-1 flex items-center justify-between text-[11px] font-medium">
+                  <span className="text-[var(--green)]">{transcriptSpeaker(t)}</span>
+                  <span className="font-normal text-[var(--faint)]">{transcriptTime(t.start_time)} – {transcriptTime(t.end_time)}</span>
                 </div>
                 <div className="text-[13px] text-[var(--muted)]">{t.content}</div>
               </div>

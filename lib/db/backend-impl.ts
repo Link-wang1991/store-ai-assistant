@@ -13,7 +13,7 @@ const BASE = API_BASE_URL;
 async function apiCall(url: string, opts?: RequestInit): Promise<any> {
   try {
     // 服务端从 cookie 读取 token
-    const token = readServerToken();
+    const token = await readServerToken();
     const res = await fetch(url, {
       ...opts,
       headers: {

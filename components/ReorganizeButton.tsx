@@ -22,7 +22,9 @@ export function ReorganizeButton() {
       className="flex w-full items-center justify-between rounded-xl border border-brand/40 bg-brand/5 px-3 py-2.5 text-sm font-medium text-brand-dark disabled:opacity-60"
     >
       <span>{pending ? "正在重新整理…" : "一键重新智能整理已导入客户"}</span>
-      <span>›</span>
+      <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="m9 6 6 6-6 6" />
+      </svg>
     </button>
   );
 }

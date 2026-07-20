@@ -45,7 +45,7 @@ export function ActionForm({
       <button
         type="submit"
         disabled={pending}
-        className="mt-3 w-full rounded-xl bg-brand py-2.5 text-sm font-medium text-white disabled:opacity-60"
+        className="app-primary-button mt-3 w-full py-2.5 text-sm disabled:opacity-60"
       >
         {pending ? "处理中…" : submitText}
       </button>

@@ -4,6 +4,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { API_BASE_URL } from "@/lib/data-source";
 
 export interface AuthContext {
   userId: string;
@@ -19,15 +20,22 @@ export interface AuthContext {
 /**
  * 从 store_ai_token cookie 提取用户上下文
  */
-export function getAuthContext(req: NextRequest): AuthContext | null {
+export async function getAuthContext(req: NextRequest): Promise<AuthContext | null> {
   const token = req.cookies.get("store_ai_token")?.value;
   if (!token) return null;
 
   try {
-    const parts = token.split(".");
-    if (parts.length < 2) return null;
-    const payloadStr = Buffer.from(parts[1], "base64url").toString("utf-8");
-    const payload = JSON.parse(payloadStr);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const result = await response.json();
+    const payload = result?.data;
+    if (!response.ok || result?.code !== 200 || !payload?.userId) return null;
 
     return {
       userId: payload.userId || "",
@@ -47,8 +55,8 @@ export function getAuthContext(req: NextRequest): AuthContext | null {
 /**
  * 鉴权守卫：未登录返回 401
  */
-export function requireAuth(req: NextRequest): AuthContext | NextResponse {
-  const ctx = getAuthContext(req);
+export async function requireAuth(req: NextRequest): Promise<AuthContext | NextResponse> {
+  const ctx = await getAuthContext(req);
   if (!ctx) {
     return NextResponse.json({ code: 401, message: "未登录" }, { status: 401 });
   }

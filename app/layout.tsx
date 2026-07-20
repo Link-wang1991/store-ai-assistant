@@ -21,7 +21,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#0ea5a4",
+  themeColor: "#f3f6f3",
 };
 
 export default function RootLayout({
@@ -33,7 +33,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body>
         <RecordingProvider>
-          <div className="mx-auto min-h-screen w-full max-w-md bg-white shadow-sm">
+          <div className="app-viewport mx-auto min-h-screen w-full max-w-[430px]">
             {children}
           </div>
           <RoleSwitcher />

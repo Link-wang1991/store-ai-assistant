@@ -32,19 +32,20 @@ export async function parseTable(buffer: Buffer, fileName: string): Promise<Pars
     return { headers: splitCsvLine(lines[0]), rows: lines.slice(1).map(splitCsvLine) };
   }
 
-  // Excel：取第一个 sheet 转二维数组
-  if (ext === "xlsx" || ext === "xls") {
-    const XLSX = await import("xlsx");
-    // cellDates：把日期单元格读成 Date 而非 Excel 序列号，否则「上次到店」会变成 45000 这种数字
-    const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
+  // Excel：只接受 .xlsx；旧版 .xls 请先转换，避免继续引入有已知安全问题的解析器。
+  if (ext === "xlsx") {
+    const { default: readExcelFile } = await import("read-excel-file/node");
+    const sheets = await readExcelFile(buffer) as Array<{ data: unknown[][] }>;
+    const sheet = sheets[0];
     if (!sheet) return { headers: [], rows: [] };
-    const grid = (XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: "" }) as any[][])
-      .map((r) => r.map((c) => String(c ?? "").trim()))
-      .filter((r) => r.some((c) => c));
+    const grid = sheet.data
+      .map((row) => row.map((value) => String(value ?? "").trim()))
+      .filter((row) => row.some(Boolean));
     if (!grid.length) return { headers: [], rows: [] };
     return { headers: grid[0], rows: grid.slice(1) };
   }
+
+  if (ext === "xls") throw new Error("旧版 .xls 文件请先另存为 .xlsx 后再导入。");
 
   // docx：客户名单一般是 Word 表格——转 HTML 抽第一个 <table> 的行列
   if (ext === "docx" || ext === "doc") {

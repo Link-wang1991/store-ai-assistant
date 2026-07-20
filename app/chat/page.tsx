@@ -7,6 +7,7 @@ import { QUICK_QUESTIONS, type Role } from "@/lib/constants";
 import { ChatClient } from "@/components/ChatClient";
 import { CoachLanding } from "@/components/CoachLanding";
 import { decodeJwtPayload } from "@/lib/jwt";
+import { AppLoading } from "@/components/AppLoading";
 
 function ChatPageInner() {
   const router = useRouter();
@@ -69,14 +70,14 @@ function ChatPageInner() {
     });
   }, [customerId]);
 
-  if (!token || loading) return <div className="flex h-screen items-center justify-center text-sm text-slate-400">加载中…</div>;
+  if (!token || loading) return <AppLoading label="正在连接 AI 教练…" />;
 
   const role = String(payload?.role || "consultant") as Role;
   const roleLabel = { owner: "老板", manager: "店长", consultant: "咨询师", beautician: "美容师", receptionist: "前台", operator: "运营" }[role] || role;
 
   const isLanding = !q && !customerId && !sessionIdParam && !isNew;
   if (isLanding) {
-    return <CoachLanding storeName="门店 AI 经营助手" isAdmin={role === "owner" || role === "manager"} sessions={sessions} onSessionDelete={handleSessionDelete} />;
+    return <CoachLanding isAdmin={String(role) === "owner" || String(role) === "manager" || String(role) === "admin"} />;
   }
 
   return (
@@ -97,7 +98,7 @@ function ChatPageInner() {
 
 export default function ChatPage() {
   return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center text-sm text-slate-400">加载中…</div>}>
+    <Suspense fallback={<AppLoading label="正在打开 AI 教练…" />}>
       <ChatPageInner />
     </Suspense>
   );

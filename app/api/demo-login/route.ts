@@ -11,15 +11,31 @@ function safeNext(raw: string | null): string {
   return raw;
 }
 
+function redirectUrl(req: NextRequest, path: string) {
+  const url = new URL(req.url);
+  const forwardedHost = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const requestHost = req.headers.get("host")?.split(",")[0]?.trim();
+  const host = forwardedHost || requestHost;
+  const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+
+  // `next dev -H 0.0.0.0` reports its bind address in req.url.  That address
+  // cannot be opened by a browser, so always restore the host the user used.
+  if (host && !host.startsWith("0.0.0.0")) url.host = host;
+  if (url.hostname === "0.0.0.0") url.hostname = "localhost";
+  if (forwardedProto === "http" || forwardedProto === "https") url.protocol = `${forwardedProto}:`;
+
+  return new URL(path, url);
+}
+
 export async function GET(req: NextRequest) {
   if (process.env.NEXT_PUBLIC_DEMO_MODE === "false") {
-    return NextResponse.redirect(new URL("/login?error=demo_disabled", req.url));
+    return NextResponse.redirect(redirectUrl(req, "/login?error=demo_disabled"));
   }
 
   const email = (req.nextUrl.searchParams.get("email") || "").trim().toLowerCase();
   const next = safeNext(req.nextUrl.searchParams.get("next"));
   if (!DEMO_EMAIL_SET.has(email)) {
-    return NextResponse.redirect(new URL("/login?error=demo_account", req.url));
+    return NextResponse.redirect(redirectUrl(req, "/login?error=demo_account"));
   }
 
   // 通过后端 API 登录
@@ -31,14 +47,14 @@ export async function GET(req: NextRequest) {
     });
     const json = await res.json();
     if (json.code !== 200 || !json.data?.token) {
-      return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(json.message || "登录失败")}`, req.url));
+      return NextResponse.redirect(redirectUrl(req, `/login?error=${encodeURIComponent(json.message || "登录失败")}`));
     }
 
-    const response = NextResponse.redirect(new URL(next, req.url));
+    const response = NextResponse.redirect(redirectUrl(req, next));
     const token = json.data.token;
     response.cookies.set("store_ai_token", token, { path: "/", maxAge: 7 * 24 * 60 * 60, sameSite: "lax" });
     return response;
   } catch {
-    return NextResponse.redirect(new URL("/login?error=backend_unavailable", req.url));
+    return NextResponse.redirect(redirectUrl(req, "/login?error=backend_unavailable"));
   }
 }

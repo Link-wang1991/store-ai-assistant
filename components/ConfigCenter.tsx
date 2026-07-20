@@ -142,10 +142,10 @@ export function ConfigCenter({ initial }: { initial: Record<string, ConfigItem[]
             <button onClick={() => toggle(i, "visibleToStaff")} title="员工是否可见" className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] ${it.visibleToStaff ? "bg-[var(--green-soft)] text-[var(--green-dark)]" : "bg-slate-100 text-slate-400"}`}>
               {it.visibleToStaff ? "员工可见" : "仅管理"}
             </button>
-            <button onClick={() => toggle(i, "enabled")} title="启用/隐藏" className="shrink-0 text-sm text-slate-400">{it.enabled ? "◉" : "○"}</button>
-            <button onClick={() => move(i, -1)} className="shrink-0 text-slate-300">↑</button>
-            <button onClick={() => move(i, 1)} className="shrink-0 text-slate-300">↓</button>
-            <button onClick={() => remove(i)} className="shrink-0 text-slate-300">✕</button>
+            <button onClick={() => toggle(i, "enabled")} title="启用/隐藏" className={`shrink-0 ${it.enabled ? "text-[var(--green-dark)]" : "text-slate-400"}`}><VisibilityIcon enabled={it.enabled} /></button>
+            <button onClick={() => move(i, -1)} title="上移" className="shrink-0 text-slate-400"><MoveIcon direction="up" /></button>
+            <button onClick={() => move(i, 1)} title="下移" className="shrink-0 text-slate-400"><MoveIcon direction="down" /></button>
+            <button onClick={() => remove(i)} title="删除" className="shrink-0 text-slate-400"><CloseIcon /></button>
           </div>
         ))}
         {adding ? (
@@ -174,4 +174,16 @@ export function ConfigCenter({ initial }: { initial: Record<string, ConfigItem[]
       </p>
     </div>
   );
+}
+
+function VisibilityIcon({ enabled }: { enabled: boolean }) {
+  return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="12" r="7.5" />{enabled && <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none" />}</svg>;
+}
+
+function MoveIcon({ direction }: { direction: "up" | "down" }) {
+  return <svg viewBox="0 0 24 24" className={`h-4 w-4 ${direction === "down" ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 14 5-5 5 5" /></svg>;
+}
+
+function CloseIcon() {
+  return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>;
 }

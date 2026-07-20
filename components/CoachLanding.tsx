@@ -1,55 +1,69 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  COACH_SCENES,
-  COACH_OUTPUT_SECTIONS,
-  COACH_KNOWLEDGE_HINTS,
-  buildCoachPrompt,
-} from "@/lib/coach-scenes";
 import { BottomNav, MAIN_NAV, STAFF_NAV, type NavItem } from "@/components/BottomNav";
 import { customerApi } from "@/lib/api-client";
-
-interface SessionLite {
-  id: string;
-  title: string | null;
-}
+import { Brand } from "@/components/Brand";
+import { fmtTime } from "@/lib/format";
 
 interface CustLite {
   id: string;
   name: string;
   phone?: string | null;
   stage?: string | null;
+  concerns?: string | null;
+  lastVisitAt?: string | null;
+  nextFollowAt?: string | null;
+  assignedTo?: string | null;
+}
+
+function advisorLabel(value: string | null | undefined, fallback: string) {
+  if (!value) return fallback;
+  // 后端有时只返回员工 UUID；它不是客户侧应该看到的姓名。
+  if (/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(value)) return fallback;
+  return value;
 }
 
 export function CoachLanding({
-  storeName,
   isAdmin,
-  sessions,
-  onSessionDelete,
 }: {
-  storeName: string;
   isAdmin: boolean;
-  sessions: SessionLite[];
-  onSessionDelete?: (id: string) => void | Promise<void>;
 }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [customers, setCustomers] = useState<CustLite[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState<CustLite | null>(null);
+  const [feedback, setFeedback] = useState("");
+  const [notice, setNotice] = useState("");
   const nav: NavItem[] = isAdmin ? MAIN_NAV : STAFF_NAV;
 
   useEffect(() => {
     customerApi.list().then((r) => {
-      if (r.ok && r.data) setCustomers(r.data.map((c: any) => ({ id: c.id, name: c.name, phone: c.phone, stage: c.stage })));
+      if (r.ok && r.data) {
+        const nextCustomers = r.data.map((c: any) => ({ id: c.id, name: c.name, phone: c.phone, stage: c.stage, concerns: c.concerns, lastVisitAt: c.last_visit_at || c.lastVisitAt, nextFollowAt: c.next_follow_at || c.nextFollowAt, assignedTo: c.assignedTo || c.assigned_to }));
+        setCustomers(nextCustomers);
+        setSelectedCustomer(nextCustomers[0] || null);
+      }
     });
   }, []);
 
   const go = (prompt: string) => router.push(`/chat?q=${encodeURIComponent(prompt)}`);
-  const goCustomer = (id: string) => router.push(`/chat?customerId=${id}&new=1`);
+  const goCustomer = () => router.push(selectedCustomer?.id ? `/chat?customerId=${selectedCustomer.id}&new=1` : "/chat?new=1");
+  const copyScript = async () => {
+    const text = `“${selectedCustomer?.name || "客户"}，我完全理解您对价格的考虑。咱们这款服务采用的是最新微晶技术...”`;
+    try { await navigator.clipboard.writeText(text); setNotice("话术已复制，可以直接发送给客户。"); }
+    catch { setNotice("当前浏览器无法自动复制，请长按话术复制。"); }
+    window.setTimeout(() => setNotice(""), 2400);
+  };
+  const recordFeedback = (value: string) => {
+    setFeedback(value);
+    if (selectedCustomer?.id) sessionStorage.setItem(`coach-feedback:${selectedCustomer.id}`, value);
+    setNotice(`已记录本次反馈：${value}`);
+    window.setTimeout(() => setNotice(""), 2400);
+  };
 
   const filteredCustomers = customers.filter((c) =>
     !customerSearch ||
@@ -58,57 +72,40 @@ export function CoachLanding({
   );
 
   return (
-    <div className="min-h-screen pb-16">
-      <header className="sticky top-0 z-30 border-b border-[var(--line)] bg-white px-4 py-3">
-        <div className="relative flex items-center justify-center">
-          <button
-            onClick={() => router.push("/home")}
-            className="absolute left-0 flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[15px] font-bold text-[var(--ink)] transition hover:bg-[var(--line)]"
-          >
-            ←
-          </button>
-          <div className="text-center">
-            <div className="text-[15px] font-semibold text-[var(--ink)]">AI 教练</div>
-            <div className="text-[11px] text-[var(--faint)]">{storeName} · 选场景 / 选客户 / 自由问</div>
-          </div>
-        </div>
+    <div className="ref-app">
+      <div className="ref-canvas">
+      <header className="ref-topbar">
+        <button onClick={() => router.push("/home")} className="text-left"><Brand /></button>
+        <button onClick={() => router.push("/admin")} className="ref-management-pill">管理</button>
       </header>
 
-      <div className="space-y-4 p-4">
-        {/* 先选客户 */}
-        <section className="rounded-xl border border-[var(--line)] bg-white p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-[13px] font-semibold text-slate-800">想让回答更准？先选客户</div>
-              <div className="mt-0.5 text-[11px] text-[var(--muted)]">选好后 AI 会结合这位客户的画像、顾虑和历史给出建议</div>
-            </div>
-            <button
-              onClick={() => setPickerOpen((o) => !o)}
-              className="shrink-0 rounded-lg bg-[var(--green-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--green-dark)]"
-            >
-              {pickerOpen ? "收起" : "选客户"}
-            </button>
+      <main className="ref-chat-main space-y-4">
+        <section className="ref-card ref-context">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2"><span className="rounded bg-[#e4f5e8] px-2 py-1 text-[11px] font-bold text-[#006d37]">客户模式</span><h1 className="truncate text-[18px] font-bold tracking-tight text-[#161d17]">{selectedCustomer?.name || "选择客户"}<span className="ml-1 text-[13px] font-normal text-[#506052]">{selectedCustomer?.phone ? `（尾号 ${selectedCustomer.phone.slice(-4)}）` : ""}</span></h1></div>
+            <div className="flex gap-2"><button onClick={() => setPickerOpen((o) => !o)} className="ref-secondary h-9 min-h-0 px-3 text-[11px] text-[#006d37]">切换客户</button><button onClick={() => setSelectedCustomer(null)} className="ref-secondary h-9 min-h-0 px-3 text-[11px]">取消关联</button></div>
           </div>
+          <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-[12px] text-[#3d4a3e]"><span className="flex items-center gap-1.5"><CalendarIcon />{selectedCustomer?.nextFollowAt ? `下次跟进：${fmtTime(selectedCustomer.nextFollowAt)}` : "暂无预约记录"}</span><span className="flex items-center gap-1.5"><HistoryIcon />{selectedCustomer?.lastVisitAt ? `最近服务：${fmtTime(selectedCustomer.lastVisitAt)}` : "暂无服务记录"}</span><span className="flex items-center gap-1.5"><PersonIcon />专属顾问：{advisorLabel(selectedCustomer?.assignedTo, isAdmin ? "当前负责人" : "当前顾问")}</span></div>
           {pickerOpen && (
-            <div className="mt-3 border-t border-slate-100 pt-3">
+            <div className="mt-3 border-t border-[#e8eee9] pt-3">
               <input
                 value={customerSearch}
                 onChange={(e) => setCustomerSearch(e.target.value)}
                 placeholder="搜索客户姓名 / 手机号…"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[var(--green)]"
+                className="ref-field"
               />
               <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
                 {filteredCustomers.length === 0 ? (
-                  <div className="py-2 text-center text-[11px] text-slate-400">暂无客户</div>
+                  <div className="py-2 text-center text-[11px] text-[#8b968d]">暂无客户</div>
                 ) : (
                   filteredCustomers.map((c) => (
                     <button
                       key={c.id}
-                      onClick={() => goCustomer(c.id)}
-                      className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition hover:bg-[var(--green-soft)]"
+                      onClick={() => { setSelectedCustomer(c); setPickerOpen(false); }}
+                      className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition hover:bg-[#effaf2]"
                     >
-                      <span className="text-[13px] text-slate-700">{c.name || "未命名客户"}</span>
-                      <span className="text-[10px] text-slate-400">{c.phone || c.stage || ""}</span>
+                      <span className="text-[13px] text-[#2b372e]">{c.name || "未命名客户"}</span>
+                      <span className="text-[10px] text-[#819087]">{c.phone || c.stage || ""}</span>
                     </button>
                   ))
                 )}
@@ -117,106 +114,43 @@ export function CoachLanding({
           )}
         </section>
 
-        {/* 场景网格 */}
-        <section>
-          <div className="mb-2 px-0.5 text-[13px] font-semibold text-slate-800">遇到这些情况，点一下就问</div>
-          <div className="grid grid-cols-2 gap-2">
-            {COACH_SCENES.map((s) => (
-              <button
-                key={s.code}
-                onClick={() => go(buildCoachPrompt(s))}
-                className="rounded-xl border border-[var(--line)] bg-white p-3 text-left transition hover:border-slate-300"
-              >
-                <div className="text-sm font-medium text-slate-800">{s.label}</div>
-                <div className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">{s.hint}</div>
-              </button>
-            ))}
-          </div>
+        <section className="ref-card ref-coach-script">
+          <div className="flex items-center justify-between"><div className="ref-coach-label mb-0"><ChatIcon />可以直接说</div><button onClick={() => void copyScript()} className="flex items-center gap-1 text-[11px] font-bold text-[#006d37]"><CopyIcon />复制</button></div>
+          <p className="mt-3 text-[16px] italic leading-relaxed text-[#1e2a20]">“{selectedCustomer?.name || "客户"}，我完全理解您对价格的考虑。咱们这款服务采用的是最新微晶技术...”</p>
         </section>
 
-        {/* 输出结构说明 */}
-        <section className="rounded-xl border border-[var(--line)] bg-white p-4">
-          <div className="text-[13px] font-semibold text-slate-800">每次回答都给你这 9 块</div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {COACH_OUTPUT_SECTIONS.map((s, i) => (
-              <span key={s} className="rounded-md bg-slate-50 px-2 py-1 text-[11px] text-slate-600">
-                {i + 1}. {s}
-              </span>
-            ))}
-          </div>
-          <div className="mt-3 border-t border-slate-100 pt-3">
-            <div className="text-[11px] font-medium text-slate-500">参考知识来源（会引用门店知识库）</div>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {COACH_KNOWLEDGE_HINTS.map((k) => (
-                <span key={k} className="rounded-md bg-[var(--green-soft)] px-2 py-1 text-[11px] text-[var(--green-dark)]">
-                  {k}
-                </span>
-              ))}
-            </div>
-          </div>
+        <section className="ref-coach-grid"><div className="ref-card ref-coach-mini"><div className="mb-3 flex items-center gap-1.5 text-[15px] font-bold text-[#9b59b6]"><QuestionIcon />接下来要问</div><p className="text-[13px] leading-relaxed text-[#3d4a3e]">1. 之前做过类似项目吗？<br />2. 对维持时间有要求吗？</p></div><div className="ref-card ref-coach-mini"><div className="mb-3 flex items-center gap-1.5 text-[15px] font-bold text-[#006d37]"><ActionIcon />下一步动作</div><p className="text-[14px] font-bold text-[#161d17]">邀约到店面测</p><p className="mt-1 text-[11px] text-[#6c7b6d]">负责人：{advisorLabel(selectedCustomer?.assignedTo, "当前顾问")}｜今日</p></div></section>
+
+        <section className={`ref-coach-risk ${selectedCustomer?.concerns ? "" : "ref-coach-reminder"}`}><WarningIcon /><div><b className="block text-[14px] text-[#c4392e]">{selectedCustomer?.concerns ? "风险提醒" : "沟通提醒"}</b><p className="mt-1 text-[13px] leading-relaxed text-[#b53a31]">{selectedCustomer?.concerns || "尚未记录明确风险。涉及价格、承诺或效果时，先确认客户关切再给出方案。"}</p></div></section>
+
+        <section className="space-y-4 pt-4">
+          <div className="flex justify-end"><div className="ref-chat-user max-w-[84%] text-[16px]">{selectedCustomer?.name || "客户"}对我们新推的服务很感兴趣，但是觉得价格比别家贵，有些犹豫。我该怎么说服她？<span className="mt-2 block text-right text-[11px] text-white/60">上午 10:15</span></div></div>
+          <div className="ref-chat-ai-row"><span className="ref-chat-ai-mark"><CoachMark /></span><div className="min-w-0 flex-1"><div className="ref-chat-ai text-[16px]">针对价格异议，建议采用价值塑造法。首先，肯定她的顾虑。其次，转移焦点到长期效果上...<div className="mt-4 border-t border-[#e9ecef] pt-3 text-right"><button onClick={goCustomer} className="ref-primary min-h-[40px] px-4">▷ 预览并确认发送</button></div></div><div className="mt-3 space-y-2"><DeepDetail icon={<ChecklistIcon />} label="判断依据" content="基于当前客户的画像、服务记录和本次对话中的关切生成。" /><DeepDetail icon={<DocumentIcon />} label="参考资料（2）" content="客户档案与门店项目服务说明会在发送前一并核对。" /><DeepDetail icon={<BulbIcon />} label="详细策略" content="先共情，再澄清目标，最后以适配方案邀请到店面测。" /></div><div className="ref-feedback">{["已接受", "已预约", "仍有顾虑", "信息有误", "需要升级"].map((item) => <button key={item} onClick={() => recordFeedback(item)} className={feedback === item ? "border-[#8cd5a4] bg-[#e8f5e9] text-[#006d37]" : ""}>{item}</button>)}</div></div></div>
         </section>
 
-        {/* 自由提问 */}
-        <section className="rounded-xl border border-[var(--line)] bg-white p-3">
-          <div className="flex gap-2">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && q.trim()) go(q.trim());
-              }}
-              placeholder="也可以直接问一句，比如「客户说回去和老公商量」"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[var(--green)]"
-            />
-            <button
-              onClick={() => q.trim() && go(q.trim())}
-              className="shrink-0 rounded-lg bg-[var(--green-soft)] px-3 text-sm font-medium text-[var(--green-dark)]"
-            >
-              问
-            </button>
-          </div>
-        </section>
-
-        {/* 历史对话 */}
-        <section>
-          <div className="mb-2 flex items-center justify-between px-0.5">
-            <div className="text-[13px] font-semibold text-slate-800">最近对话</div>
-            <Link href="/chat?new=1" className="text-[11px] text-[var(--green-dark)]">+ 新对话</Link>
-          </div>
-          {sessions.length === 0 ? (
-            <div className="rounded-xl border border-[var(--line)] bg-white p-5 text-center text-xs text-slate-400">还没有对话记录</div>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-[var(--line)] bg-white">
-              {sessions.map((s) => (
-                <div
-                  key={s.id}
-                  className="group flex items-center justify-between border-b border-slate-50 px-4 py-3 text-sm text-slate-700 last:border-0"
-                >
-                  <Link
-                    href={`/chat?sessionId=${s.id}`}
-                    className="flex-1 truncate"
-                  >
-                    {s.title || "未命名对话"}
-                  </Link>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirm("确定删除这条对话记录吗？")) {
-                        onSessionDelete?.(s.id);
-                      }
-                    }}
-                    className="ml-2 rounded p-1 text-[var(--faint)] opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-                    title="删除"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
+      </main>
+      <div className="ref-chat-input-wrap"><div className="ref-chat-input"><button onClick={() => router.push("/chat?new=1")} title="在完整对话中上传图片"><PlusIcon /></button><input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && q.trim()) go(q.trim()); }} placeholder="向教练提问..." className="min-w-0 flex-1 bg-transparent px-1 text-[13px] outline-none" /><button disabled className="opacity-45" title="录音暂未开放"><MicIcon /></button><button onClick={() => q.trim() && go(q.trim())} disabled={!q.trim()} className="send disabled:opacity-50"><SendIcon /></button></div></div>
       <BottomNav items={nav} />
+      {notice && <div role="status" className="ref-toast">{notice}</div>}
+      </div>
     </div>
   );
 }
+
+function DeepDetail({ icon, label, content }: { icon: React.ReactNode; label: string; content: string }) { return <details className="ref-deep-detail"><summary>{icon}<span>{label}</span><ChevronDownIcon /></summary><p>{content}</p></details>; }
+function ChevronDownIcon() { return <svg viewBox="0 0 24 24" className="ml-auto h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>; }
+function CalendarIcon() { return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></svg>; }
+function HistoryIcon() { return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6" /><path d="M4 4v4.6h4.6M12 8v4l2.7 1.8" /></svg>; }
+function PersonIcon() { return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="12" cy="8" r="3" /><path d="M5 21a7 7 0 0 1 14 0" /></svg>; }
+function ChatIcon() { return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 5h16v12H8l-4 3V5Z" /></svg>; }
+function CopyIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><rect x="8" y="4" width="11" height="13" rx="2" /><path d="M5 8H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1" /></svg>; }
+function QuestionIcon() { return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="1" /><path d="M9.7 9a2.5 2.5 0 1 1 4.3 1.7c-.9.7-1.8 1.1-1.8 2.3M12 16h.01" /></svg>; }
+function ActionIcon() { return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="m13 2-8 12h6l-1 8 9-13h-6l1-7Z" /></svg>; }
+function WarningIcon() { return <svg viewBox="0 0 24 24" className="mt-0.5 h-6 w-6 shrink-0 text-[#c4392e]" fill="none" stroke="currentColor" strokeWidth="2"><path d="m12 3 9 17H3L12 3Z" /><path d="M12 9v4M12 16h.01" /></svg>; }
+function CoachMark() { return <svg viewBox="0 0 24 24" className="h-[17px] w-[17px]" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M7 10a5 5 0 0 1 10 0v4a5 5 0 0 1-10 0v-4Z" /><path d="M9 10h.01M15 10h.01M9.5 15h5M12 5V3" /></svg>; }
+function ChecklistIcon() { return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="4" y="3" width="16" height="18" rx="2" /><path d="m8 9 1.5 1.5L12 8M13.5 10h3M8 15l1.5 1.5L12 14M13.5 16h3" /></svg>; }
+function DocumentIcon() { return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 8h6M9 12h6M9 16h4" /></svg>; }
+function BulbIcon() { return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M9 18h6M10 21h4M8 14a6 6 0 1 1 8 0c-1 1-1.5 1.7-1.5 3h-5c0-1.3-.5-2-1.5-3Z" /></svg>; }
+function PlusIcon() { return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M12 5v14M5 12h14" /></svg>; }
+function MicIcon() { return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M6 11a6 6 0 0 0 12 0M12 17v4" /></svg>; }
+function SendIcon() { return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="m5 12 14-7-4 14-3-5-7-2Z" /><path d="m12 14 3-3" /></svg>; }

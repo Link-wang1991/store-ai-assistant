@@ -15,14 +15,15 @@ export const dynamic = "force-dynamic";
 
 const IMG_EXTS = ["jpg", "jpeg", "png", "webp", "gif", "bmp"];
 
-export default async function KnowledgeDetailPage({ params }: { params: { id: string } }) {
+export default async function KnowledgeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const ctx = (await getAuthContext())!;
   if (!hasPermission(ctx, "knowledge", "view")) redirect("/admin");
 
-  const doc: any = await db.knowledge.getDoc(params.id);
+  const doc: any = await db.knowledge.getDoc(id);
   if (!doc || doc.store_id !== ctx.store.id) notFound();
 
-  const chunks = (await db.knowledge.getChunksByDoc(params.id, ctx.store.id)) as any[];
+  const chunks = (await db.knowledge.getChunksByDoc(id, ctx.store.id)) as any[];
   const labels = ctx.roleLabels;
 
   const roleDefs = await db.roles.listActiveDefinitions(ctx.store.id);
