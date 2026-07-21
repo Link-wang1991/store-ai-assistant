@@ -110,15 +110,15 @@ function CustomersPageContent() {
   if (loading) return <div className="ref-app flex min-h-screen items-center justify-center"><div className="h-7 w-7 animate-spin rounded-full border-2 border-[#d7e5d8] border-t-[#006d37]" /></div>;
 
   return (
-    <div className="ref-app"><div className="ref-canvas">
+    <div className="ref-app ref-customer-page"><div className="ref-canvas">
       <header className="ref-topbar">
         <div className="flex min-w-0 items-center gap-1"><button onClick={() => router.push("/home")} className="ref-icon-button" aria-label="返回首页">←</button><Brand /></div>
         <span className="ref-management-pill">客户机会池</span>
       </header>
       <main className="ref-main">
-        <section className="mb-4"><h1 className="ref-page-title">今天该跟谁</h1><p className="mt-1 text-[12px] leading-relaxed text-[#6c7b6d]">按到店、新客、成交培育、老客、沉睡和风险安排今日服务。</p></section>
+        <section className="ref-customer-intro"><h1 className="ref-page-title">今天该跟谁</h1><p>按到店、新客、成交培育、老客、沉睡和风险安排今日服务。</p></section>
         <label className="ref-search"><SearchIcon /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索姓名、电话或当前需求" aria-label="搜索客户" /></label>
-        <div className="ref-customer-tabs">{TABS.map((tab) => <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`ref-customer-tab ${activeTab === tab.key ? "active" : ""}`}><b>{tabCounts[tab.key] || 0}</b><span>{tab.label}</span></button>)}</div>
+        <div className="ref-customer-tabs" aria-label="客户分组筛选">{TABS.map((tab) => <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`ref-customer-tab ${activeTab === tab.key ? "active" : ""}`}><span>{tab.label}</span><b>{tabCounts[tab.key] || 0}</b></button>)}</div>
         <section className="mt-4 space-y-3">
           {filtered.length === 0 ? <div className="ref-empty">{query ? "没有匹配的客户，换个关键词试试。" : "该分池下还没有客户。"}</div> : filtered.map((customer) => {
             const pool = customer._pool;
@@ -126,7 +126,7 @@ function CustomersPageContent() {
             const suggestion = value(customer, "ai_suggestion", "aiSuggestion", "concerns");
             const lastVisit = value(customer, "last_visit_at", "lastVisitAt");
             const nextFollow = value(customer, "next_follow_at", "nextFollowAt");
-            return <article key={customer.id} className="ref-card p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><span className="ref-work-avatar">{String(customer.name || "客").slice(0, 1)}</span><div className="min-w-0"><h2 className="truncate text-[16px] font-bold text-[#161d17]">{customer.name || "客户"}</h2><p className="mt-1 text-[11px] text-[#6c7b6d]">{customer.phone ? `尾号 ${String(customer.phone).slice(-4)}` : "暂无电话"} · {stage}</p></div></div><span className={`ref-status ${POOL_TONE[pool] || "ref-status-blue"}`}>{POOL_LABEL[pool] || "老客"}</span></div>
+            return <article key={customer.id} className="ref-card ref-customer-list-card"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><span className="ref-work-avatar">{String(customer.name || "客").slice(0, 1)}</span><div className="min-w-0"><h2 className="truncate text-[16px] font-bold text-[#161d17]">{customer.name || "客户"}</h2><p className="mt-1 text-[11px] text-[#6c7b6d]">{customer.phone ? `尾号 ${String(customer.phone).slice(-4)}` : "暂无电话"} · {stage}</p></div></div><span className={`ref-status ${POOL_TONE[pool] || "ref-status-blue"}`}>{POOL_LABEL[pool] || "老客"}</span></div>
               {suggestion && <div className="ref-work-insight mt-3"><SparkIcon /><p>{suggestion}</p></div>}
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[#6c7b6d]">{lastVisit && <span>最近到店：{fmtDate(lastVisit)}</span>}{nextFollow && <span>下次跟进：{fmtDate(nextFollow)}</span>}</div>
               <div className="mt-4 flex gap-2"><Link href={`/customers/${customer.id}`} className="ref-primary flex-1 px-3">查看 AI 画像</Link><Link href={`/chat?customerId=${customer.id}&new=1`} className="ref-secondary px-3 text-[#006d37]">问 AI 教练</Link></div>

@@ -7,10 +7,12 @@ import { chatApi } from "@/lib/api-client";
 import { submitAiFeedback } from "@/lib/actions";
 import { BottomNav, STAFF_NAV } from "@/components/BottomNav";
 import { Brand } from "@/components/Brand";
+import { CoachModeTabs } from "@/components/CoachModeTabs";
 
 interface SessionItem {
   id: string;
   title?: string | null;
+  customerId?: string | null;
 }
 
 interface Msg {
@@ -129,6 +131,7 @@ export function ChatClient({
   customerName,
   sessions = [],
   onSessionDelete,
+  view = "workbench",
 }: {
   roleLabel: string;
   storeName: string;
@@ -140,6 +143,7 @@ export function ChatClient({
   customerName?: string;
   sessions?: SessionItem[];
   onSessionDelete?: (id: string) => void | Promise<void>;
+  view?: "workbench" | "classic";
 }) {
   const router = useRouter();
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
@@ -150,6 +154,17 @@ export function ChatClient({
   const fileRef = useRef<HTMLInputElement>(null);
   const [scenePicker, setScenePicker] = useState(false);
   const [pendingScene, setPendingScene] = useState("");
+
+  const chatHref = ({ nextSessionId, newConversation = false, customerIdOverride }: { nextSessionId?: string; newConversation?: boolean; customerIdOverride?: string | null } = {}) => {
+    const params = new URLSearchParams();
+    if (view === "classic") params.set("view", "classic");
+    const effectiveCustomerId = customerIdOverride === undefined ? customerId : customerIdOverride;
+    if (effectiveCustomerId) params.set("customerId", effectiveCustomerId);
+    if (nextSessionId) params.set("sessionId", nextSessionId);
+    if (newConversation) params.set("new", "1");
+    const query = params.toString();
+    return query ? `/chat?${query}` : "/chat";
+  };
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -194,7 +209,7 @@ export function ChatClient({
         { id: d.messageId, role: "ai", text: d.answer, riskLevel: d.riskLevel, answerType: d.answerType },
       ]);
       if (wasNew) {
-        router.replace(`/chat?sessionId=${d.sessionId}`);
+        router.replace(chatHref({ nextSessionId: d.sessionId }));
       }
     } catch {
       setMessages((m) => [...m, { id: "e" + Date.now(), role: "ai", text: "⚠️ 网络不太稳定，请稍后重试。" }]);
@@ -219,12 +234,12 @@ export function ChatClient({
         reader.onerror = () => reject(new Error("图片读取失败"));
         reader.readAsDataURL(file);
       });
-      const response = await fetch("/api/vision", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageUrl, hint, sessionId }) });
+      const response = await fetch("/api/vision", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageUrl, hint, sessionId, customerId }) });
       const result = await response.json();
       if (!response.ok || !result.answer) throw new Error(result.error || "图片处理失败");
       setSessionId(result.sessionId || sessionId);
       setMessages((m) => [...m, { id: result.messageId || "ai" + Date.now(), role: "ai", text: result.answer, riskLevel: result.riskLevel, answerType: result.answerType }]);
-      if (wasNew && result.sessionId) router.replace(`/chat?sessionId=${result.sessionId}`);
+      if (wasNew && result.sessionId) router.replace(chatHref({ nextSessionId: result.sessionId }));
     } catch (error: any) {
       setMessages((m) => [...m, { id: "ei" + Date.now(), role: "ai", text: `图片处理失败：${error?.message || "请稍后重试。"}` }]);
     } finally {
@@ -234,7 +249,7 @@ export function ChatClient({
 
   function previewMessage() {
     if (customerId) {
-      router.push(`/chat?customerId=${customerId}&new=1`);
+      router.push(chatHref({ newConversation: true }));
       return;
     }
     setInput("请基于上面的建议，生成一段可直接发送给客户的确认话术。");
@@ -243,13 +258,14 @@ export function ChatClient({
   return (
     <div className="ref-chat">
       <header className="ref-topbar">
-        <button onClick={() => router.push("/chat")} className="text-left"><Brand /></button>
+        <button onClick={() => router.push(view === "classic" ? "/chat?view=classic" : "/chat")} className="text-left"><Brand /></button>
         <button onClick={() => router.push("/admin")} className="ref-management-pill">管理</button>
       </header>
+      <CoachModeTabs active={view} />
 
-      <main ref={scrollRef} className="ref-chat-main no-scrollbar max-h-[calc(100vh-44px)] overflow-y-auto">
+      <main ref={scrollRef} className="ref-chat-main no-scrollbar max-h-[calc(100vh-88px)] overflow-y-auto">
         <section className="ref-card ref-context">
-          <div className="mb-2 flex items-start justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><span className="rounded bg-[#eaf7ee] px-1.5 py-0.5 text-[10px] font-bold text-[#078a4c]">{customerId ? "客户模式" : "自由对话"}</span><h2 className="truncate text-[16px] font-bold tracking-tight text-[#172119]">{customerName || "门店经营助手"}</h2></div><button onClick={() => router.push("/chat")} className="rounded-lg border border-[#b6e0c1] px-2 py-1 text-[10px] font-bold text-[#078a4c]">{customerId ? "切换客户" : "选择客户"}</button></div>
+          <div className="mb-2 flex items-start justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><span className="rounded bg-[#eaf7ee] px-1.5 py-0.5 text-[10px] font-bold text-[#078a4c]">{customerId ? "客户模式" : "自由对话"}</span><h2 className="truncate text-[16px] font-bold tracking-tight text-[#172119]">{customerName || "门店经营助手"}</h2></div><button onClick={() => router.push(view === "classic" ? "/chat?view=classic" : "/chat")} className="rounded-lg border border-[#b6e0c1] px-2 py-1 text-[10px] font-bold text-[#078a4c]">{customerId ? "切换客户" : "选择客户"}</button></div>
           <div className="grid grid-cols-2 gap-y-1 text-[11px] text-[#738077]"><span className="flex items-center gap-1"><ClockIcon />{customerId ? "已关联画像与历史" : "可随时直接提问"}</span><span className="flex items-center gap-1"><RoleIcon />{roleLabel}</span></div>
         </section>
 

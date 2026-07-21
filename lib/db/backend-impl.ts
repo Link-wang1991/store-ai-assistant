@@ -215,6 +215,7 @@ export const chat = {
     return rows[0] || null;
   },
   async createSession(input: any) { return proxy.insert("chat_sessions", input); },
+  async bindSessionCustomer(id: string, customerId: string) { await proxy.update("chat_sessions", id, { customer_id: customerId }); },
   async touchSession(id: string) { await proxy.update("chat_sessions", id, { updated_at: new Date().toISOString() }); },
   async insertMessage(input: any) { return proxy.insert("chat_messages", input); },
   async listSessionMessages(sessionId: string, _limit = 20) {

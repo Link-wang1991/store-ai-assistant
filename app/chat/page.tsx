@@ -5,7 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { chatApi, customerApi, getToken, type SessionItem, type ChatMessageItem } from "@/lib/api-client";
 import { QUICK_QUESTIONS, type Role } from "@/lib/constants";
 import { ChatClient } from "@/components/ChatClient";
+import { ClassicChatClient } from "@/components/ClassicChatClient";
 import { CoachLanding } from "@/components/CoachLanding";
+import { ClassicCoachLanding } from "@/components/ClassicCoachLanding";
 import { decodeJwtPayload } from "@/lib/jwt";
 import { AppLoading } from "@/components/AppLoading";
 
@@ -16,6 +18,7 @@ function ChatPageInner() {
   const customerId = searchParams.get("customerId");
   const sessionIdParam = searchParams.get("sessionId");
   const isNew = searchParams.get("new");
+  const view = searchParams.get("view");
 
   const [token, setToken] = useState<string | null>(null);
   const [payload, setPayload] = useState<any>(null);
@@ -63,12 +66,18 @@ function ChatPageInner() {
     await loadSessions();
   };
 
+  const sessionCustomerId = sessionIdParam
+    ? sessions.find((session) => session.id === sessionIdParam)?.customerId || undefined
+    : undefined;
+  const effectiveCustomerId = customerId || sessionCustomerId;
+
   useEffect(() => {
-    if (!customerId) return;
-    customerApi.detail(customerId).then(r => {
+    setCustomerName(undefined);
+    if (!effectiveCustomerId) return;
+    customerApi.detail(effectiveCustomerId).then(r => {
       if (r.ok && r.data) setCustomerName(r.data.name);
     });
-  }, [customerId]);
+  }, [effectiveCustomerId]);
 
   if (!token || loading) return <AppLoading label="正在连接 AI 教练…" />;
 
@@ -77,7 +86,26 @@ function ChatPageInner() {
 
   const isLanding = !q && !customerId && !sessionIdParam && !isNew;
   if (isLanding) {
-    return <CoachLanding isAdmin={String(role) === "owner" || String(role) === "manager" || String(role) === "admin"} />;
+    if (view === "classic") {
+      return <ClassicCoachLanding storeName="门店 AI 经营助手" isAdmin={String(role) === "owner" || String(role) === "manager" || String(role) === "admin"} sessions={sessions} onSessionDelete={handleSessionDelete} />;
+    }
+    return <CoachLanding mode={view === "classic" ? "classic" : "workbench"} isAdmin={String(role) === "owner" || String(role) === "manager" || String(role) === "admin"} />;
+  }
+
+  if (view === "classic") {
+    return (
+      <ClassicChatClient
+        roleLabel={roleLabel}
+        quickQuestions={QUICK_QUESTIONS[role] || []}
+        initialMessages={initialMessages}
+        initialSessionId={sessionIdParam || null}
+        initialQuestion={q || ""}
+        customerId={effectiveCustomerId}
+        customerName={customerName}
+        sessions={sessions}
+        onSessionDelete={handleSessionDelete}
+      />
+    );
   }
 
   return (
@@ -88,10 +116,11 @@ function ChatPageInner() {
       initialMessages={initialMessages}
       initialSessionId={sessionIdParam || null}
       initialQuestion={q || ""}
-      customerId={customerId || undefined}
+      customerId={effectiveCustomerId}
       customerName={customerName}
       sessions={sessions}
       onSessionDelete={handleSessionDelete}
+      view={view === "classic" ? "classic" : "workbench"}
     />
   );
 }

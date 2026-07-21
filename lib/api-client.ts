@@ -192,6 +192,7 @@ export type ChatMessageItem = {
 export type SessionItem = {
   id: string;
   title: string | null;
+  customerId?: string | null;
 };
 
 // -- AI 对话 --

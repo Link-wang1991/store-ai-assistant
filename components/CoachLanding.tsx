@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { BottomNav, MAIN_NAV, STAFF_NAV, type NavItem } from "@/components/BottomNav";
 import { customerApi } from "@/lib/api-client";
 import { Brand } from "@/components/Brand";
+import { CoachModeTabs } from "@/components/CoachModeTabs";
 import { fmtTime } from "@/lib/format";
 
 interface CustLite {
@@ -27,8 +28,10 @@ function advisorLabel(value: string | null | undefined, fallback: string) {
 
 export function CoachLanding({
   isAdmin,
+  mode = "workbench",
 }: {
   isAdmin: boolean;
+  mode?: "workbench" | "classic";
 }) {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -45,15 +48,25 @@ export function CoachLanding({
       if (r.ok && r.data) {
         const nextCustomers = r.data.map((c: any) => ({ id: c.id, name: c.name, phone: c.phone, stage: c.stage, concerns: c.concerns, lastVisitAt: c.last_visit_at || c.lastVisitAt, nextFollowAt: c.next_follow_at || c.nextFollowAt, assignedTo: c.assignedTo || c.assigned_to }));
         setCustomers(nextCustomers);
-        setSelectedCustomer(nextCustomers[0] || null);
       }
     });
   }, []);
 
-  const go = (prompt: string) => router.push(`/chat?q=${encodeURIComponent(prompt)}`);
-  const goCustomer = () => router.push(selectedCustomer?.id ? `/chat?customerId=${selectedCustomer.id}&new=1` : "/chat?new=1");
+  const isCustomerMode = Boolean(selectedCustomer);
+  const classic = mode === "classic";
+  const chatHref = (question?: string) => {
+    const params = new URLSearchParams({ new: "1" });
+    if (classic) params.set("view", "classic");
+    if (selectedCustomer?.id) params.set("customerId", selectedCustomer.id);
+    if (question) params.set("q", question);
+    return `/chat?${params.toString()}`;
+  };
+  const go = (prompt: string) => router.push(chatHref(prompt));
+  const goCustomer = () => router.push(chatHref());
   const copyScript = async () => {
-    const text = `“${selectedCustomer?.name || "客户"}，我完全理解您对价格的考虑。咱们这款服务采用的是最新微晶技术...”`;
+    const text = isCustomerMode
+      ? `“${selectedCustomer?.name}，我完全理解您对价格的考虑。咱们先一起看看怎样的方案更适合您。”`
+      : "请描述客户的顾虑、当前进展或你想达成的目标，我会给你可直接使用的话术和下一步动作。";
     try { await navigator.clipboard.writeText(text); setNotice("话术已复制，可以直接发送给客户。"); }
     catch { setNotice("当前浏览器无法自动复制，请长按话术复制。"); }
     window.setTimeout(() => setNotice(""), 2400);
@@ -71,21 +84,32 @@ export function CoachLanding({
     c.phone?.includes(customerSearch)
   );
 
+  const directScript = isCustomerMode
+    ? `“${selectedCustomer?.name}，我完全理解您对价格的考虑。咱们先一起看看怎样的方案更适合您。”`
+    : "“描述客户的顾虑、当前进展或你想达成的目标。我会给你可直接使用的话术和下一步动作。”";
+  const sampleQuestion = isCustomerMode
+    ? `${selectedCustomer?.name}对我们新推的服务很感兴趣，但是觉得价格比别家贵，有些犹豫。我该怎么说服她？`
+    : "客户觉得服务价格偏高、有些犹豫，我该如何继续沟通？";
+  const sampleAnswer = isCustomerMode
+    ? "针对价格异议，建议采用价值塑造法。先肯定她的顾虑，再确认她真正看重的效果和体验，最后给出匹配的到店方案。"
+    : "先确认客户最在意的是预算、效果还是决策时机，再用与她关切相匹配的价值说明推进下一步。不要直接承诺折扣或效果。";
+
   return (
-    <div className="ref-app">
+    <div className={`ref-app ${classic ? "ref-chat-standard" : "ref-chat-workbench"}`}>
       <div className="ref-canvas">
       <header className="ref-topbar">
         <button onClick={() => router.push("/home")} className="text-left"><Brand /></button>
         <button onClick={() => router.push("/admin")} className="ref-management-pill">管理</button>
       </header>
+      <CoachModeTabs active={mode} />
 
       <main className="ref-chat-main space-y-4">
         <section className="ref-card ref-context">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2"><span className="rounded bg-[#e4f5e8] px-2 py-1 text-[11px] font-bold text-[#006d37]">客户模式</span><h1 className="truncate text-[18px] font-bold tracking-tight text-[#161d17]">{selectedCustomer?.name || "选择客户"}<span className="ml-1 text-[13px] font-normal text-[#506052]">{selectedCustomer?.phone ? `（尾号 ${selectedCustomer.phone.slice(-4)}）` : ""}</span></h1></div>
-            <div className="flex gap-2"><button onClick={() => setPickerOpen((o) => !o)} className="ref-secondary h-9 min-h-0 px-3 text-[11px] text-[#006d37]">切换客户</button><button onClick={() => setSelectedCustomer(null)} className="ref-secondary h-9 min-h-0 px-3 text-[11px]">取消关联</button></div>
+            <div className="flex min-w-0 items-center gap-2"><span className="rounded bg-[#e4f5e8] px-2 py-1 text-[11px] font-bold text-[#006d37]">{isCustomerMode ? "客户模式" : "通用模式"}</span><h1 className="truncate text-[18px] font-bold tracking-tight text-[#161d17]">{selectedCustomer?.name || "门店 AI 教练"}<span className="ml-1 text-[13px] font-normal text-[#506052]">{selectedCustomer?.phone ? `（尾号 ${selectedCustomer.phone.slice(-4)}）` : ""}</span></h1></div>
+            <div className="flex gap-2"><button onClick={() => setPickerOpen((o) => !o)} className="ref-secondary h-9 min-h-0 px-3 text-[11px] text-[#006d37]">{isCustomerMode ? "切换客户" : "选择客户"}</button>{isCustomerMode && <button onClick={() => { setSelectedCustomer(null); setPickerOpen(false); }} className="ref-secondary h-9 min-h-0 px-3 text-[11px]">取消关联</button>}</div>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-[12px] text-[#3d4a3e]"><span className="flex items-center gap-1.5"><CalendarIcon />{selectedCustomer?.nextFollowAt ? `下次跟进：${fmtTime(selectedCustomer.nextFollowAt)}` : "暂无预约记录"}</span><span className="flex items-center gap-1.5"><HistoryIcon />{selectedCustomer?.lastVisitAt ? `最近服务：${fmtTime(selectedCustomer.lastVisitAt)}` : "暂无服务记录"}</span><span className="flex items-center gap-1.5"><PersonIcon />专属顾问：{advisorLabel(selectedCustomer?.assignedTo, isAdmin ? "当前负责人" : "当前顾问")}</span></div>
+          <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-[12px] text-[#3d4a3e]">{isCustomerMode ? <><span className="flex items-center gap-1.5"><CalendarIcon />{selectedCustomer?.nextFollowAt ? `下次跟进：${fmtTime(selectedCustomer.nextFollowAt)}` : "暂无预约记录"}</span>{!classic && <span className="flex items-center gap-1.5"><HistoryIcon />{selectedCustomer?.lastVisitAt ? `最近服务：${fmtTime(selectedCustomer.lastVisitAt)}` : "暂无服务记录"}</span>}<span className="flex items-center gap-1.5"><PersonIcon />专属顾问：{advisorLabel(selectedCustomer?.assignedTo, isAdmin ? "当前负责人" : "当前顾问")}</span></> : <><span className="flex items-center gap-1.5"><ChatIcon />可随时直接提问</span><span className="flex items-center gap-1.5"><PersonIcon />{isAdmin ? "老板" : "当前员工"}</span></>}</div>
           {pickerOpen && (
             <div className="mt-3 border-t border-[#e8eee9] pt-3">
               <input
@@ -116,20 +140,20 @@ export function CoachLanding({
 
         <section className="ref-card ref-coach-script">
           <div className="flex items-center justify-between"><div className="ref-coach-label mb-0"><ChatIcon />可以直接说</div><button onClick={() => void copyScript()} className="flex items-center gap-1 text-[11px] font-bold text-[#006d37]"><CopyIcon />复制</button></div>
-          <p className="mt-3 text-[16px] italic leading-relaxed text-[#1e2a20]">“{selectedCustomer?.name || "客户"}，我完全理解您对价格的考虑。咱们这款服务采用的是最新微晶技术...”</p>
+          <p className="mt-3 text-[16px] italic leading-relaxed text-[#1e2a20]">{directScript}</p>
         </section>
 
-        <section className="ref-coach-grid"><div className="ref-card ref-coach-mini"><div className="mb-3 flex items-center gap-1.5 text-[15px] font-bold text-[#9b59b6]"><QuestionIcon />接下来要问</div><p className="text-[13px] leading-relaxed text-[#3d4a3e]">1. 之前做过类似项目吗？<br />2. 对维持时间有要求吗？</p></div><div className="ref-card ref-coach-mini"><div className="mb-3 flex items-center gap-1.5 text-[15px] font-bold text-[#006d37]"><ActionIcon />下一步动作</div><p className="text-[14px] font-bold text-[#161d17]">邀约到店面测</p><p className="mt-1 text-[11px] text-[#6c7b6d]">负责人：{advisorLabel(selectedCustomer?.assignedTo, "当前顾问")}｜今日</p></div></section>
+        <section className="ref-coach-grid"><div className="ref-card ref-coach-mini"><div className="mb-3 flex items-center gap-1.5 text-[15px] font-bold text-[#9b59b6]"><QuestionIcon />接下来要问</div><p className="text-[13px] leading-relaxed text-[#3d4a3e]">{isCustomerMode ? <>1. 之前做过类似项目吗？<br />2. 对维持时间有要求吗？</> : <>1. 目前最想解决什么问题？<br />2. 希望推进到哪一步？</>}</p></div><div className="ref-card ref-coach-mini"><div className="mb-3 flex items-center gap-1.5 text-[15px] font-bold text-[#006d37]"><ActionIcon />下一步动作</div><p className="text-[14px] font-bold text-[#161d17]">{isCustomerMode ? "邀约到店面测" : "明确目标后继续对话"}</p><p className="mt-1 text-[11px] text-[#6c7b6d]">负责人：{advisorLabel(selectedCustomer?.assignedTo, isAdmin ? "当前负责人" : "当前员工")}｜今日</p></div></section>
 
-        <section className={`ref-coach-risk ${selectedCustomer?.concerns ? "" : "ref-coach-reminder"}`}><WarningIcon /><div><b className="block text-[14px] text-[#c4392e]">{selectedCustomer?.concerns ? "风险提醒" : "沟通提醒"}</b><p className="mt-1 text-[13px] leading-relaxed text-[#b53a31]">{selectedCustomer?.concerns || "尚未记录明确风险。涉及价格、承诺或效果时，先确认客户关切再给出方案。"}</p></div></section>
+        <section className={`ref-coach-risk ${selectedCustomer?.concerns ? "" : "ref-coach-reminder"}`}><WarningIcon /><div><b className="block text-[14px] text-[#c4392e]">{selectedCustomer?.concerns ? "风险提醒" : "沟通提醒"}</b><p className="mt-1 text-[13px] leading-relaxed text-[#b53a31]">{selectedCustomer?.concerns || "涉及价格、承诺、效果或投诉时，先确认事实与客户感受，再给出下一步方案。"}</p></div></section>
 
         <section className="space-y-4 pt-4">
-          <div className="flex justify-end"><div className="ref-chat-user max-w-[84%] text-[16px]">{selectedCustomer?.name || "客户"}对我们新推的服务很感兴趣，但是觉得价格比别家贵，有些犹豫。我该怎么说服她？<span className="mt-2 block text-right text-[11px] text-white/60">上午 10:15</span></div></div>
-          <div className="ref-chat-ai-row"><span className="ref-chat-ai-mark"><CoachMark /></span><div className="min-w-0 flex-1"><div className="ref-chat-ai text-[16px]">针对价格异议，建议采用价值塑造法。首先，肯定她的顾虑。其次，转移焦点到长期效果上...<div className="mt-4 border-t border-[#e9ecef] pt-3 text-right"><button onClick={goCustomer} className="ref-primary min-h-[40px] px-4">▷ 预览并确认发送</button></div></div><div className="mt-3 space-y-2"><DeepDetail icon={<ChecklistIcon />} label="判断依据" content="基于当前客户的画像、服务记录和本次对话中的关切生成。" /><DeepDetail icon={<DocumentIcon />} label="参考资料（2）" content="客户档案与门店项目服务说明会在发送前一并核对。" /><DeepDetail icon={<BulbIcon />} label="详细策略" content="先共情，再澄清目标，最后以适配方案邀请到店面测。" /></div><div className="ref-feedback">{["已接受", "已预约", "仍有顾虑", "信息有误", "需要升级"].map((item) => <button key={item} onClick={() => recordFeedback(item)} className={feedback === item ? "border-[#8cd5a4] bg-[#e8f5e9] text-[#006d37]" : ""}>{item}</button>)}</div></div></div>
+          <div className="flex justify-end"><div className="ref-chat-user max-w-[84%] text-[16px]">{sampleQuestion}<span className="mt-2 block text-right text-[11px] text-white/60">上午 10:15</span></div></div>
+          <div className="ref-chat-ai-row"><span className="ref-chat-ai-mark"><CoachMark /></span><div className="min-w-0 flex-1"><div className="ref-chat-ai text-[16px]">{sampleAnswer}<div className="mt-4 border-t border-[#e9ecef] pt-3 text-right"><button onClick={goCustomer} className="ref-primary min-h-[40px] px-4">▷ 开始完整对话</button></div></div><div className="mt-3 space-y-2"><DeepDetail icon={<ChecklistIcon />} label="判断依据" content={isCustomerMode ? "基于当前客户的画像、服务记录和本次对话中的关切生成。" : "依据你提供的场景、目标和门店知识库生成建议。"} /><DeepDetail icon={<DocumentIcon />} label="参考资料（2）" content={isCustomerMode ? "客户档案与门店项目服务说明会在发送前一并核对。" : "可在完整对话中补充门店项目说明或具体案例。"} /><DeepDetail icon={<BulbIcon />} label="详细策略" content="先澄清目标和事实，再给出适配方案与可执行的下一步动作。" /></div><div className="ref-feedback">{["已接受", "已预约", "仍有顾虑", "信息有误", "需要升级"].map((item) => <button key={item} onClick={() => recordFeedback(item)} className={feedback === item ? "border-[#8cd5a4] bg-[#e8f5e9] text-[#006d37]" : ""}>{item}</button>)}</div></div></div>
         </section>
 
       </main>
-      <div className="ref-chat-input-wrap"><div className="ref-chat-input"><button onClick={() => router.push("/chat?new=1")} title="在完整对话中上传图片"><PlusIcon /></button><input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && q.trim()) go(q.trim()); }} placeholder="向教练提问..." className="min-w-0 flex-1 bg-transparent px-1 text-[13px] outline-none" /><button disabled className="opacity-45" title="录音暂未开放"><MicIcon /></button><button onClick={() => q.trim() && go(q.trim())} disabled={!q.trim()} className="send disabled:opacity-50"><SendIcon /></button></div></div>
+      <div className="ref-chat-input-wrap"><div className="ref-chat-input"><button onClick={() => router.push(chatHref())} title="在完整对话中上传图片"><PlusIcon /></button><input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && q.trim()) go(q.trim()); }} placeholder="向教练提问..." className="min-w-0 flex-1 bg-transparent px-1 text-[13px] outline-none" /><button disabled className="opacity-45" title="录音暂未开放"><MicIcon /></button><button onClick={() => q.trim() && go(q.trim())} disabled={!q.trim()} className="send disabled:opacity-50"><SendIcon /></button></div></div>
       <BottomNav items={nav} />
       {notice && <div role="status" className="ref-toast">{notice}</div>}
       </div>
