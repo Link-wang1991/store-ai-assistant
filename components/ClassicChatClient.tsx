@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RISK_LEVEL_COLORS, type RiskLevel } from "@/lib/constants";
-import { chatApi } from "@/lib/api-client";
-import { submitAiFeedback } from "@/lib/actions";
+import { chatApi, type AiActionProposal } from "@/lib/api-client";
 import { CoachModeTabs } from "@/components/CoachModeTabs";
 
 interface SessionItem { id: string; title?: string | null; customerId?: string | null; }
@@ -14,6 +13,10 @@ interface Msg {
   text: string;
   riskLevel?: string | null;
   answerType?: string | null;
+  feedbackType?: string | null;
+  retrieved?: { chunkId?: string; documentTitle?: string; snippet: string }[];
+  methodology?: { id?: string; scenarioKey?: string; title: string; module?: string; source?: string }[];
+  actionProposal?: AiActionProposal | null;
 }
 
 const ANSWER_TYPE_LABEL: Record<string, string> = {
@@ -47,17 +50,38 @@ function ClassicRichText({ text }: { text: string }) {
   );
 }
 
-function ClassicAiBubble({ message, onFeedback }: { message: Msg; onFeedback: (messageId: string, helpful: boolean) => void }) {
+function ClassicAiBubble({ message, onFeedback, canCreateAction, onCreateAction, onOpenActionWorkbench }: {
+  message: Msg;
+  onFeedback: (messageId: string, helpful: boolean, comment?: string) => void;
+  canCreateAction: boolean;
+  onCreateAction: (messageId: string) => Promise<AiActionProposal | null>;
+  onOpenActionWorkbench: () => void;
+}) {
   const [analysisOpen, setAnalysisOpen] = useState(false);
-  const [feedback, setFeedback] = useState<"" | "helpful" | "notHelpful">("");
+  const [feedback, setFeedback] = useState<"" | "helpful" | "notHelpful">(
+    message.feedbackType === "已接受" || message.feedbackType === "已预约" ? "helpful"
+      : message.feedbackType ? "notHelpful" : "",
+  );
+  const [proposal, setProposal] = useState<AiActionProposal | null>(message.actionProposal || null);
+  const [proposalBusy, setProposalBusy] = useState(false);
   const markerAt = message.text.indexOf(ANALYSIS_MARKER);
   const answer = markerAt >= 0 ? message.text.slice(0, markerAt).trim() : message.text;
   const analysis = markerAt >= 0 ? message.text.slice(markerAt + ANALYSIS_MARKER.length).trim() : "";
 
   const markFeedback = (helpful: boolean) => {
     if (feedback) return;
+    const comment = helpful ? undefined : window.prompt("请补充这条建议不合适的原因（可留空）：") || undefined;
     setFeedback(helpful ? "helpful" : "notHelpful");
-    onFeedback(message.id, helpful);
+    onFeedback(message.id, helpful, comment);
+  };
+
+  const createAction = async () => {
+    if (proposalBusy) return;
+    setProposalBusy(true);
+    try {
+      const next = await onCreateAction(message.id);
+      if (next) setProposal(next);
+    } finally { setProposalBusy(false); }
   };
 
   return (
@@ -74,6 +98,8 @@ function ClassicAiBubble({ message, onFeedback }: { message: Msg; onFeedback: (m
             {analysisOpen && <div className="mt-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs leading-relaxed text-slate-600"><ClassicRichText text={analysis} /></div>}
           </div>
         )}
+        {message.retrieved && message.retrieved.length > 0 && <div className="mt-1.5 ml-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[10px] leading-relaxed text-slate-500"><div className="font-medium text-slate-700">参考门店资料</div>{message.retrieved.map((item, index) => <div key={item.chunkId || index}>{index + 1}. {item.documentTitle ? `《${item.documentTitle}》：` : ""}{item.snippet}</div>)}</div>}
+        {message.methodology && message.methodology.length > 0 && <div className="mt-1.5 ml-1 rounded-lg border border-[#b6e0c1] bg-[#f5faf5] px-2.5 py-2 text-[10px] leading-relaxed text-slate-600"><div className="font-medium text-[var(--green-dark)]">系统销售方法论</div>{message.methodology.map((item, index) => <div key={item.id || item.scenarioKey || index}>{index + 1}. 《{item.title}》{item.module ? ` · ${item.module}` : ""}</div>)}<div className="mt-1 text-slate-400">用于沟通策略，门店规则优先。</div></div>}
         {(message.answerType || (message.riskLevel && message.riskLevel !== "L1")) && (
           <div className="mt-1 flex gap-1.5 pl-1">
             {message.answerType && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">{ANSWER_TYPE_LABEL[message.answerType] || message.answerType}</span>}
@@ -84,6 +110,10 @@ function ClassicAiBubble({ message, onFeedback }: { message: Msg; onFeedback: (m
           <button onClick={() => markFeedback(true)} disabled={Boolean(feedback)} className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] ${feedback === "helpful" ? "bg-green-100 text-green-700" : "bg-slate-50 text-slate-400 hover:bg-green-50 hover:text-green-600"}`}>👍 {feedback === "helpful" ? "有用" : ""}</button>
           <button onClick={() => markFeedback(false)} disabled={Boolean(feedback)} className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] ${feedback === "notHelpful" ? "bg-red-100 text-red-700" : "bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-600"}`}>👎 {feedback === "notHelpful" ? "没用" : ""}</button>
         </div>
+        {canCreateAction && (
+          proposal ? <div className="mt-1.5 pl-1 text-[10px] text-[var(--green-dark)]">已保存为待确认待办 · <button onClick={onOpenActionWorkbench} className="font-semibold underline">去工作台调整并确认</button></div>
+            : <button onClick={() => void createAction()} disabled={proposalBusy} className="mt-1.5 ml-1 rounded-full border border-brand/30 bg-white px-2.5 py-1 text-[10px] font-medium text-brand-dark disabled:opacity-50">{proposalBusy ? "正在保存…" : "将建议转为待办"}</button>
+        )}
       </div>
     </div>
   );
@@ -138,9 +168,25 @@ export function ClassicChatClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleFeedback = useCallback(async (messageId: string, isHelpful: boolean) => {
-    try { await submitAiFeedback({ messageId, isHelpful }); } catch { /* Feedback never blocks chat. */ }
+  const handleFeedback = useCallback(async (messageId: string, isHelpful: boolean, comment?: string) => {
+    try { await chatApi.feedback(messageId, isHelpful ? "已接受" : "信息有误", comment); } catch { /* Feedback never blocks chat. */ }
   }, []);
+
+  const createActionProposal = useCallback(async (messageId: string) => {
+    const result = await chatApi.createActionProposal(messageId);
+    if (!result.ok || !result.data) {
+      alert(result.error || "暂时无法保存待办建议");
+      return null;
+    }
+    return result.data;
+  }, []);
+
+  const openActionWorkbench = () => {
+    const params = new URLSearchParams();
+    if (customerId) params.set("customerId", customerId);
+    if (sessionId) params.set("sessionId", sessionId);
+    router.push(`/chat${params.size ? `?${params}` : ""}`);
+  };
 
   async function send(value: string) {
     const question = value.trim();
@@ -154,7 +200,7 @@ export function ClassicChatClient({
       if (!result.ok || !result.data) throw new Error(result.error || "请求失败");
       const data = result.data;
       setSessionId(data.sessionId);
-      setMessages((list) => [...list, { id: data.messageId, role: "ai", text: data.answer, riskLevel: data.riskLevel, answerType: data.answerType }]);
+      setMessages((list) => [...list, { id: data.messageId, role: "ai", text: data.answer, riskLevel: data.riskLevel, answerType: data.answerType, retrieved: data.retrieved, methodology: data.methodology }]);
       if (isFirstMessage) router.replace(href({ nextSessionId: data.sessionId }));
     } catch {
       setMessages((list) => [...list, { id: `e${Date.now()}`, role: "ai", text: "⚠️ 网络不太稳定，请稍后重试。" }]);
@@ -211,7 +257,7 @@ export function ClassicChatClient({
 
       <main ref={scrollRef} className="no-scrollbar flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {messages.length === 0 && <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">这里是<span className="font-medium text-slate-600">自由对话</span>，想问什么直接说。<br /><span className="text-xs text-[var(--faint)]">想要「点一下出结构化结果」？回</span><button onClick={() => router.push("/chat")} className="text-xs text-[var(--green-dark)]">AI 教练工作台</button></div>}
-        {messages.map((message) => message.role === "user" ? <div key={message.id} className="flex justify-end"><div className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-brand px-3.5 py-2.5 text-sm text-white">{message.text}</div></div> : <ClassicAiBubble key={message.id} message={message} onFeedback={handleFeedback} />)}
+        {messages.map((message) => message.role === "user" ? <div key={message.id} className="flex justify-end"><div className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-brand px-3.5 py-2.5 text-sm text-white">{message.text}</div></div> : <ClassicAiBubble key={message.id} message={message} onFeedback={handleFeedback} canCreateAction={Boolean(customerId)} onCreateAction={createActionProposal} onOpenActionWorkbench={openActionWorkbench} />)}
         {loading && <div className="flex justify-start"><div className="rounded-2xl rounded-bl-sm bg-slate-100 px-3.5 py-2.5 text-sm text-slate-400">正在思考…</div></div>}
       </main>
 

@@ -140,20 +140,33 @@ async function getStartupStatus(demoEmails: string[]) {
 
   try {
     const demo = await db.startup.getDemoStatus(demoEmails) as any;
-    status.push(
+    const activeStoreCount = Number(demo?.activeStoreCount);
+    const demoAccountCount = Number(demo?.demoAccountCount);
+    const canReadDemoStatus = Number.isFinite(activeStoreCount) && Number.isFinite(demoAccountCount);
+    if (canReadDemoStatus) {
+      status.push(
         {
           label: "门店数据",
-          value: demo.activeStoreCount > 0 ? `${demo.activeStoreCount} 个` : "未发现",
-          ok: demo.activeStoreCount > 0,
-          hint: "如果为 0，请执行 node --env-file=.env.local scripts/seed.mjs",
+          value: activeStoreCount > 0 ? `${activeStoreCount} 个演示门店` : "未创建演示数据",
+          // 本地启动依赖的是 Spring Boot 后端；没有前端 demo 表不等于真实门店无法登录。
+          ok: true,
+          hint: activeStoreCount > 0 ? "仅用于本地测试" : "未配置本地演示数据，不影响已有真实账号登录",
         },
         {
           label: "演示账号",
-          value: `${demo.demoAccountCount}/${demoEmails.length}`,
-          ok: demo.demoAccountsReady,
-          hint: demo.demoAccountsReady ? `${demoEmails.length} 个演示账号已可测试` : "账号不完整，请重新执行 seed 脚本",
+          value: `${demoAccountCount}/${demoEmails.length}`,
+          ok: Boolean(demo.demoAccountsReady),
+          hint: demo.demoAccountsReady ? `${demoEmails.length} 个演示账号已可测试` : "测试账号未完整创建，请使用已有账号登录",
         }
       );
+    } else {
+      status.push({
+        label: "前端演示数据",
+        value: "未启用",
+        ok: true,
+        hint: "当前使用 Spring Boot 业务后端；客户、会谈和任务数据请在登录后查看，不会因此影响软件启动。",
+      });
+    }
     } catch (error: any) {
       status.push({
         label: "数据库连通",

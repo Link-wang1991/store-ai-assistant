@@ -23,6 +23,12 @@ const ADMIN_ICONS: Record<string, React.ReactNode> = {
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
     </svg>
   ),
+  reviews: (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M5 3h11l3 3v15H5z" />
+      <path d="m8 13 2.2 2.2L16 9.5" />
+    </svg>
+  ),
   meetings: (
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M12 20h9" />
@@ -76,6 +82,7 @@ const ADMIN_ICONS: Record<string, React.ReactNode> = {
 const ADMIN_LINKS = [
   { key: "customers", href: "/admin/customers", label: "客户管理" },
   { key: "knowledge", href: "/admin/knowledge", label: "知识库" },
+  { key: "reviews", href: "/admin/experience-reviews", label: "经验审核" },
   { key: "meetings", href: "/admin/meetings", label: "会谈复盘" },
   { key: "tasks", href: "/admin/tasks", label: "增长动作" },
   { key: "employees", href: "/admin/employees", label: "员工管理" },
@@ -139,8 +146,6 @@ export default function AdminPage() {
     };
   }, [snapshot]);
 
-  if (loading) return <div className="ref-app flex h-screen items-center justify-center text-sm text-[#6c7b6d]">正在汇总经营数据…</div>;
-
   return (
     <div className="ref-app ref-admin-page">
       <div className="ref-canvas">
@@ -150,6 +155,7 @@ export default function AdminPage() {
       </header>
 
       <main className="ref-profile">
+        {loading && <p className="mb-4 text-center text-[12px] text-[#718077]">正在同步经营数据…</p>}
         <section>
           <div className="mb-4 flex items-center justify-between"><h1 className="ref-page-title">待处理异常</h1><Link href="/admin/pending" className="text-[12px] font-bold text-[#078a4c]">查看所有日志 ↗</Link></div>
           <div className="space-y-2.5">

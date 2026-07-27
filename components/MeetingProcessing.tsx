@@ -7,7 +7,11 @@ import { fetchWithRetry, readJson } from "@/lib/network/client-fetch";
 
 // 报告页在"转写中/分析中"时挂载它：继续轮询推进状态机，
 // 这样即使录音页前端中断（关页面/断网），从报告页打开也能接着把流程跑完。
-export function MeetingProcessing({ id, initialStatus }: { id: string; initialStatus: string }) {
+export function MeetingProcessing({ id, initialStatus, onCompleted }: {
+  id: string;
+  initialStatus: string;
+  onCompleted?: () => void;
+}) {
   const router = useRouter();
   const [status, setStatus] = useState(initialStatus);
   const [error, setError] = useState("");
@@ -26,7 +30,11 @@ export function MeetingProcessing({ id, initialStatus }: { id: string; initialSt
           const d = await readJson(res);
           if (d.status) setStatus(d.status);
           setNetworkFailures(0);
-          if (d.status === "done") { router.refresh(); return; }
+          if (d.status === "done") {
+            onCompleted?.();
+            router.refresh();
+            return;
+          }
           if (d.status === "failed") { setError(d.error || "处理失败"); return; }
         } catch {
           setNetworkFailures((count) => {
@@ -39,7 +47,7 @@ export function MeetingProcessing({ id, initialStatus }: { id: string; initialSt
     })();
     return () => { stop = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [id, onCompleted, router]);
 
   const label =
     status === "analyzing" ? "AI 正在复盘分析…" :
@@ -50,8 +58,15 @@ export function MeetingProcessing({ id, initialStatus }: { id: string; initialSt
       {error ? (
         <div className="text-center">
           <p className="text-sm text-red-500">⚠️ {error}</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-3 rounded-full border border-[var(--green)] px-4 py-1.5 text-[12px] font-medium text-[var(--green)]"
+          >
+            重新检查处理结果
+          </button>
           {error.includes("有效语音") && (
-            <Link href="/meeting" className="mt-3 inline-block rounded-full bg-[var(--green)] px-4 py-1.5 text-[12px] font-medium text-white">去重新录音</Link>
+            <Link href="/meeting" className="ml-2 mt-3 inline-block rounded-full bg-[var(--green)] px-4 py-1.5 text-[12px] font-medium text-white">去重新录音</Link>
           )}
         </div>
       ) : (

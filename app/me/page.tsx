@@ -78,6 +78,20 @@ export default function MePage() {
               </div>
               <ChevronRightIcon />
             </Link>
+            {role === "owner" && (
+              <Link href="/admin/data" className="me-management-card mt-2 flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <span className="me-management-icon flex h-9 w-9 items-center justify-center rounded-full text-[#087f5b]">
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 20h14" /></svg>
+                  </span>
+                  <div>
+                    <div className="text-sm font-semibold text-[#243128]">数据切换</div>
+                    <div className="mt-0.5 text-xs text-[#91a095]">备份测试数据后，导入真实客户与知识库</div>
+                  </div>
+                </div>
+                <ChevronRightIcon />
+              </Link>
+            )}
           </section>
         )}
 

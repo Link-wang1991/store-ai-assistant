@@ -33,7 +33,9 @@ async function apiCall(url: string, opts?: RequestInit): Promise<any> {
     if (!res.ok || json.code !== 200) throw new Error(json.message || "请求失败");
     return json;
   } catch (e: any) {
-    throw new Error(e?.message === "请求失败" ? e.message : "服务暂时不可用");
+    // 保留后端的业务错误（例如邮箱已存在），不要全部伪装成网络故障。
+    if (e instanceof Error) throw e;
+    throw new Error("服务暂时不可用");
   }
 }
 
@@ -60,15 +62,14 @@ const proxy = {
   },
   /** 插入 */
   async insert(table: string, data: any): Promise<any> {
-    try {
-      const res = await apiCall(`${BASE}/api/proxy/${table}`, {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
-      return res.data as any;
-    } catch {
-      return null;
-    }
+    // 写入失败绝不能伪装成 null：调用方若继续读取 null.id，会把真正的后端错误
+    // 变成毫无意义的前端 TypeError，批量上传也就无法告诉用户具体哪一步失败。
+    const res = await apiCall(`${BASE}/api/proxy/${table}`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    if (!res.data) throw new Error("保存失败：服务未返回新记录");
+    return res.data as any;
   },
   /** 更新 */
   async update(table: string, id: string, data: any): Promise<void> {
@@ -146,6 +147,19 @@ export const employees = {
   },
   async update(id: string, _storeId: string, patch: any) {
     await proxy.update("employees", id, patch);
+  },
+};
+
+// ============================================================
+// employeeAccounts（受控账号创建）
+// ============================================================
+export const employeeAccounts = {
+  async create(input: { name: string; email: string; password: string; phone?: string | null; role: string }) {
+    const res = await apiCall(`${BASE}/api/admin/employees`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    return res.data;
   },
 };
 
@@ -235,8 +249,14 @@ export const chat = {
 // knowledge（知识库）
 // ============================================================
 export const knowledge = {
-  async listDocs(_storeId: string) { return proxy.list("knowledge_documents", { limit: "500" }); },
-  async getDoc(id: string) { return proxy.get("knowledge_documents", id); },
+  async listDocs(_storeId: string) {
+    const rows = await proxy.list("knowledge_documents", { limit: "500" });
+    return rows.map(normalizeKnowledgeDocument);
+  },
+  async getDoc(id: string) {
+    const row = await proxy.get("knowledge_documents", id);
+    return row ? normalizeKnowledgeDocument(row) : null;
+  },
   async createDoc(input: any) { return proxy.insert("knowledge_documents", input); },
   async setDocStatus(id: string, status: string) { await proxy.update("knowledge_documents", id, { status }); },
   async setDocVisibleRoles(id: string, _storeId: string, roles: string[]) {
@@ -261,6 +281,25 @@ export const knowledge = {
   async listChunksMissingEmbedding(_limit = 500) { return []; },
   async setChunkEmbedding(_id: string, _embeddingLiteral: string) {},
 };
+
+/** MySQL JSON 列经 Proxy 返回的是 JSON 字符串；页面层需要稳定的数组。 */
+function normalizeKnowledgeDocument(row: any) {
+  return {
+    ...row,
+    visible_roles: parseStringArray(row?.visible_roles),
+    tags: parseStringArray(row?.tags),
+  };
+}
+
+function parseStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+  } catch {}
+  return value.split(/[,，]/).map((item) => item.trim()).filter(Boolean);
+}
 
 // ============================================================
 // memory（客户记忆）
@@ -477,12 +516,27 @@ export const meetingAccessLogs = {
   async log(input: any) { return proxy.insert("meeting_access_logs", input); },
 };
 export const config = {
-  async listByStore(_storeId: string) { return proxy.list("store_config", { limit: "200" }); },
+  async listByStore(_storeId: string) {
+    const result = await apiCall(`${BASE}/api/store-config`);
+    return result?.data || [];
+  },
   async replaceCategory(
     _storeId: string,
-    _category: string,
-    _items: { code: string; display_name: string; enabled: boolean; visible_to_staff: boolean }[]
-  ) {},
+    category: string,
+    items: { code: string; display_name: string; enabled: boolean; visible_to_staff: boolean }[]
+  ) {
+    await apiCall(`${BASE}/api/store-config/${encodeURIComponent(category)}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        items: items.map((item) => ({
+          code: item.code,
+          displayName: item.display_name,
+          enabled: item.enabled,
+          visibleToStaff: item.visible_to_staff,
+        })),
+      }),
+    });
+  },
 };
 export const startup = {
   async getDemoStatus(_emails: string[]) { return {}; },
@@ -496,7 +550,7 @@ export const maintenance = {
 // db 统一导出（与 lib/db/index.ts 结构一致）
 // ============================================================
 export const db = {
-  stores, users, employees, knowledge, chat,
+  stores, users, employees, employeeAccounts, knowledge, chat,
   pending, gaps, risks, startup, tasks,
   banned, standard, reports, roles,
   announcements, schedules, campaigns, projects,

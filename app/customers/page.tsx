@@ -11,6 +11,7 @@ import { fmtDate } from "@/lib/format";
 import { decodeJwtPayload } from "@/lib/jwt";
 import { STAGE_LABEL } from "@/lib/opportunity";
 import { AppLoading } from "@/components/AppLoading";
+import { assignPool } from "@/lib/customer-pools";
 
 const TABS = [
   { key: "all", label: "全部" }, { key: "today", label: "今日到店" }, { key: "new", label: "新客" },
@@ -25,31 +26,17 @@ function value(c: any, ...keys: string[]) {
   return undefined;
 }
 
-function isToday(iso?: string | null) {
-  if (!iso) return false;
-  const d = new Date(iso); const now = new Date();
-  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-}
-
-function daysAgo(iso?: string | null) {
-  if (!iso) return Infinity;
-  return (Date.now() - new Date(iso).getTime()) / 86400000;
-}
-
 function effectivePool(c: any): string {
-  const pool = value(c, "pool");
-  const stage = value(c, "stage");
   const lastVisit = value(c, "last_visit_at", "lastVisitAt");
+  const lastDeal = value(c, "last_deal_at", "lastDealAt");
   const nextFollow = value(c, "next_follow_at", "nextFollowAt");
-  const lastActive = value(c, "last_active_at", "lastActiveAt");
-  const createdAt = value(c, "created_at", "createdAt");
-  if (pool) return pool;
-  if (isToday(lastVisit) || isToday(nextFollow)) return "today";
-  if (stage === "churn_risk") return "risk";
-  if (Math.min(daysAgo(lastActive), daysAgo(lastVisit)) > 30) return "dormant";
-  if (stage === "intent") return "new_deal";
-  if (stage === "new" && daysAgo(createdAt) <= 7) return "new";
-  return "regular";
+  // 与首页共享唯一的机会池规则。数据库旧 pool 仅作历史字段，不再覆盖实时判断。
+  return assignPool({
+    ...c,
+    last_visit_at: lastVisit,
+    last_deal_at: lastDeal,
+    next_follow_at: nextFollow,
+  });
 }
 
 export default function CustomersPage() {
@@ -116,7 +103,7 @@ function CustomersPageContent() {
         <span className="ref-management-pill">客户机会池</span>
       </header>
       <main className="ref-main">
-        <section className="ref-customer-intro"><h1 className="ref-page-title">今天该跟谁</h1><p>按到店、新客、成交培育、老客、沉睡和风险安排今日服务。</p></section>
+        <section className="ref-customer-intro"><h1 className="ref-page-title">今天该跟谁</h1><p>与首页使用同一分池规则；“今日到店”包含今天已到店或已预约的客户。</p></section>
         <label className="ref-search"><SearchIcon /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索姓名、电话或当前需求" aria-label="搜索客户" /></label>
         <div className="ref-customer-tabs" aria-label="客户分组筛选">{TABS.map((tab) => <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`ref-customer-tab ${activeTab === tab.key ? "active" : ""}`}><span>{tab.label}</span><b>{tabCounts[tab.key] || 0}</b></button>)}</div>
         <section className="mt-4 space-y-3">

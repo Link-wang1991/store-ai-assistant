@@ -70,21 +70,16 @@ export default async function UploadPage() {
 
             <div>
               <label className="mb-1 flex items-center justify-between text-xs text-slate-500">
-                <span>资料分类 *（可选已有，也可直接输入新分类）</span>
+                <span>资料分类 *（请选择已配置的精确分类）</span>
                 <Link href="/settings/config#knowledge" className="shrink-0 text-[var(--green-dark)]">管理分类 ›</Link>
               </label>
-              <input
-                name="category"
-                list="kb-categories"
-                className={inputCls}
-                placeholder="如：项目介绍 / 价格表 / 客诉SOP（可自定义）"
-                required
-              />
-              <datalist id="kb-categories">
+              <select name="category" className={inputCls} defaultValue="" required>
+                <option value="" disabled>请选择资料所属分类</option>
                 {categories.map((c) => (
-                  <option key={c} value={c} />
+                  <option key={c} value={c}>{c}</option>
                 ))}
-              </datalist>
+              </select>
+              <p className="mt-1 text-[11px] text-slate-400">没有合适分类？先在“管理分类”新增，返回本页即可选择。</p>
             </div>
 
             <div>
@@ -144,8 +139,14 @@ export default async function UploadPage() {
               <input name="title" placeholder="如：会员卡退卡规则" className={inputCls} required />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-500">分类 *（可输入新分类）</label>
-              <input name="category" list="kb-categories" className={inputCls} placeholder="如：制度规则 / 话术 / 客诉SOP" required />
+              <label className="mb-1 flex items-center justify-between text-xs text-slate-500">
+                <span>分类 *（请选择已配置的精确分类）</span>
+                <Link href="/settings/config#knowledge" className="shrink-0 text-[var(--green-dark)]">管理分类 ›</Link>
+              </label>
+              <select name="category" className={inputCls} defaultValue="" required>
+                <option value="" disabled>请选择资料所属分类</option>
+                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
             <div>
               <label className="mb-1 block text-xs text-slate-500">可见角色 *</label>

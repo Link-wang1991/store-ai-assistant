@@ -25,6 +25,10 @@ export default async function KnowledgeDetailPage({ params }: { params: Promise<
 
   const chunks = (await db.knowledge.getChunksByDoc(id, ctx.store.id)) as any[];
   const labels = ctx.roleLabels;
+  // local:// 是后端受控本机存储标记；页面通过同源代理读取，避免暴露磁盘路径或 JWT。
+  const originalFileUrl = typeof doc.file_url === "string" && doc.file_url.startsWith("local://")
+    ? `/api/knowledge/${id}/file`
+    : doc.file_url;
 
   const roleDefs = await db.roles.listActiveDefinitions(ctx.store.id);
   const roleOptions =
@@ -83,14 +87,14 @@ export default async function KnowledgeDetailPage({ params }: { params: Promise<
         )}
 
         {/* 原文件（图片直接显示，其它给查看链接）*/}
-        {doc.file_url ? (
+        {originalFileUrl ? (
           <Card>
             <div className="mb-2 text-sm font-semibold text-slate-700">原文件</div>
             {IMG_EXTS.includes((doc.file_type || "").toLowerCase()) ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={doc.file_url} alt={doc.title} className="w-full rounded-lg border border-slate-100" />
+              <img src={originalFileUrl} alt={doc.title} className="w-full rounded-lg border border-slate-100" />
             ) : (
-              <a href={doc.file_url} target="_blank" rel="noreferrer" className="text-sm text-brand-dark">
+              <a href={originalFileUrl} target="_blank" rel="noreferrer" className="text-sm text-brand-dark">
                 在新窗口打开原文件 ›
               </a>
             )}

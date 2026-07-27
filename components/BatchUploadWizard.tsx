@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { batchUploadKnowledge, type BatchUploadItem } from "@/lib/actions";
 import { KnowledgeCategoryEdit } from "@/components/KnowledgeCategoryEdit";
@@ -26,6 +27,19 @@ export function BatchUploadWizard({
   const [opts, setOpts] = useState<string[]>(categories);
   const [error, setError] = useState("");
 
+  // 从「分类管理」返回时，服务端已被 revalidate；刷新当前路由以获得新分类。
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (!document.hidden) router.refresh();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => document.removeEventListener("visibilitychange", refreshWhenVisible);
+  }, [router]);
+
+  useEffect(() => {
+    setOpts(categories);
+  }, [categories]);
+
   function toggleRole(key: string) {
     setRoles((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
   }
@@ -35,7 +49,7 @@ export function BatchUploadWizard({
     setError("");
     if (!files || files.length === 0) return setError("请选择至少一个文件");
     if (roles.length === 0) return setError("请选择可见角色");
-    if (mode === "fixed" && !fixedCategory.trim()) return setError("请选择或输入要归入的分类");
+    if (mode === "fixed" && !fixedCategory.trim()) return setError("请选择要归入的精确分类");
     const arr = Array.from(files);
     const oversize = arr.find((f) => f.size > 25 * 1024 * 1024);
     if (oversize) return setError(`「${oversize.name}」超过 25MB，请压缩或拆分后单独上传`);
@@ -120,18 +134,19 @@ export function BatchUploadWizard({
         </div>
         {mode === "fixed" && (
           <>
-            <input
+            <select
               value={fixedCategory}
               onChange={(e) => setFixedCategory(e.target.value)}
-              list="batch-categories"
-              placeholder="选已有分类，或直接输入新分类（这批全归这里）"
               className={`mt-2 ${inputCls}`}
-            />
-            <datalist id="batch-categories">
-              {categories.map((c) => (
-                <option key={c} value={c} />
+            >
+              <option value="" disabled>请选择这批资料的精确分类</option>
+              {opts.map((c) => (
+                <option key={c} value={c}>{c}</option>
               ))}
-            </datalist>
+            </select>
+            <p className="mt-1 text-[11px] text-slate-400">
+              没有合适分类？<Link href="/settings/config#knowledge" className="text-[var(--green-dark)] underline">先去新增分类</Link>
+            </p>
           </>
         )}
       </div>

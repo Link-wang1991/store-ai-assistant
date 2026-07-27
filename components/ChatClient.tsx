@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RISK_LEVEL_COLORS, type RiskLevel } from "@/lib/constants";
-import { chatApi } from "@/lib/api-client";
-import { submitAiFeedback } from "@/lib/actions";
+import { chatApi, type AiActionProposal, type ActionProposalAssignee } from "@/lib/api-client";
 import { BottomNav, STAFF_NAV } from "@/components/BottomNav";
 import { Brand } from "@/components/Brand";
 import { CoachModeTabs } from "@/components/CoachModeTabs";
@@ -21,6 +20,10 @@ interface Msg {
   text: string;
   riskLevel?: string | null;
   answerType?: string | null;
+  feedbackType?: string | null;
+  retrieved?: { chunkId?: string; documentTitle?: string; snippet: string }[];
+  methodology?: { id?: string; scenarioKey?: string; title: string; module?: string; source?: string }[];
+  actionProposal?: AiActionProposal | null;
 }
 
 const ANSWER_TYPE_LABEL: Record<string, string> = {
@@ -65,18 +68,120 @@ function RichText({ text }: { text: string }) {
   );
 }
 
-function AiBubble({ m, onFeedback, onPreview }: { m: Msg; onFeedback?: (mid: string, helpful: boolean) => void; onPreview?: () => void }) {
+function toLocalDateTime(value?: string | null) {
+  const date = value ? new Date(value) : new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function ActionProposalEditor({
+  proposal, busy, onSave, onCancel,
+}: {
+  proposal: AiActionProposal;
+  busy: boolean;
+  onSave: (input: Pick<AiActionProposal, "title" | "content" | "assignedTo" | "priority" | "dueAt">) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(proposal.title);
+  const [content, setContent] = useState(proposal.content);
+  const [assignees, setAssignees] = useState<ActionProposalAssignee[]>([]);
+  const [assignedTo, setAssignedTo] = useState(proposal.assignedTo || "");
+  const [priority, setPriority] = useState(proposal.priority || "normal");
+  const [dueAt, setDueAt] = useState(toLocalDateTime(proposal.dueAt));
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    chatApi.actionProposalAssignees().then((result) => {
+      if (!result.ok || !result.data) return;
+      setAssignees(result.data);
+      if (!assignedTo && result.data[0]) setAssignedTo(result.data[0].id);
+    });
+  }, [assignedTo]);
+
+  async function save() {
+    if (!title.trim() || !content.trim() || !assignedTo || !dueAt) {
+      setError("请补齐动作、负责人和截止时间。");
+      return;
+    }
+    setError("");
+    await onSave({ title: title.trim(), content: content.trim(), assignedTo, priority, dueAt: new Date(dueAt).toISOString() });
+  }
+
+  return (
+    <div className="mt-2 space-y-2 rounded-lg border border-[#b6e0c1] bg-white p-2.5 text-[11px]">
+      <div className="font-semibold text-[var(--green-dark)]">确认前先完善待办</div>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} className="ref-field h-9 text-[12px]" aria-label="待办标题" />
+      <textarea value={content} onChange={(e) => setContent(e.target.value)} maxLength={2000} rows={3} className="ref-field min-h-[72px] text-[12px]" aria-label="具体动作" />
+      <div className="grid grid-cols-2 gap-2">
+        <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className="ref-field h-9 text-[11px]" aria-label="负责人">
+          {assignees.length === 0 ? <option value={assignedTo}>加载负责人…</option> : assignees.map((person) => <option key={person.id} value={person.id}>{person.name} · {person.role}</option>)}
+        </select>
+        <select value={priority} onChange={(e) => setPriority(e.target.value)} className="ref-field h-9 text-[11px]" aria-label="优先级">
+          <option value="normal">普通</option><option value="high">重要</option><option value="urgent">紧急</option>
+        </select>
+      </div>
+      <label className="block text-[11px] text-[var(--muted)]">截止时间<input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} className="ref-field mt-1 h-9 w-full text-[11px]" /></label>
+      {error && <p className="text-[11px] text-red-600">{error}</p>}
+      <div className="flex justify-end gap-2"><button onClick={onCancel} disabled={busy} className="rounded-full border border-[var(--line)] px-3 py-1.5">取消</button><button onClick={() => void save()} disabled={busy} className="rounded-full bg-[var(--green)] px-3 py-1.5 text-white">{busy ? "保存中…" : "保存待办"}</button></div>
+    </div>
+  );
+}
+
+function AiBubble({
+  m, onFeedback, onPreview, canCreateAction, onCreateAction, onResolveAction, onUpdateAction,
+}: {
+  m: Msg;
+  onFeedback?: (mid: string, label: string, comment?: string) => Promise<boolean>;
+  onPreview?: () => void;
+  canCreateAction?: boolean;
+  onCreateAction?: (mid: string) => Promise<AiActionProposal | null>;
+  onResolveAction?: (proposalId: string, decision: "apply" | "reject") => Promise<AiActionProposal | null>;
+  onUpdateAction?: (proposalId: string, input: Pick<AiActionProposal, "title" | "content" | "assignedTo" | "priority" | "dueAt">) => Promise<AiActionProposal | null>;
+}) {
   const [open, setOpen] = useState(false);
-  const [fb, setFb] = useState<string>("");
+  const [fb, setFb] = useState<string>(m.feedbackType || "");
+  const [proposal, setProposal] = useState<AiActionProposal | null>(m.actionProposal || null);
+  const [proposalBusy, setProposalBusy] = useState(false);
+  const [editingProposal, setEditingProposal] = useState(false);
   const idx = m.text.indexOf(ANALYSIS_MARKER);
   const main = idx >= 0 ? m.text.slice(0, idx).trim() : m.text;
   const analysis = idx >= 0 ? m.text.slice(idx + ANALYSIS_MARKER.length).trim() : "";
   const isAgentAction = /\n\n✅/.test(main);
 
-  function clickFeedback(label: string, helpful: boolean) {
+  async function clickFeedback(label: string) {
     if (fb) return;
-    setFb(label);
-    onFeedback?.(m.id, helpful);
+    const needsReason = ["仍有顾虑", "信息有误", "需要升级"].includes(label);
+    const comment = needsReason ? window.prompt(`请补充“${label}”的具体原因（可留空）：`) : "";
+    if (comment === null) return;
+    const saved = await onFeedback?.(m.id, label, comment || undefined);
+    if (saved !== false) setFb(label);
+  }
+
+  async function createAction() {
+    if (!onCreateAction || proposalBusy) return;
+    setProposalBusy(true);
+    try {
+      const next = await onCreateAction(m.id);
+      if (next) setProposal(next);
+    } finally { setProposalBusy(false); }
+  }
+
+  async function resolveAction(decision: "apply" | "reject") {
+    if (!proposal || !onResolveAction || proposalBusy) return;
+    setProposalBusy(true);
+    try {
+      const next = await onResolveAction(proposal.id, decision);
+      if (next) setProposal(next);
+    } finally { setProposalBusy(false); }
+  }
+
+  async function updateAction(input: Pick<AiActionProposal, "title" | "content" | "assignedTo" | "priority" | "dueAt">) {
+    if (!proposal || !onUpdateAction || proposalBusy) return;
+    setProposalBusy(true);
+    try {
+      const next = await onUpdateAction(proposal.id, input);
+      if (next) { setProposal(next); setEditingProposal(false); }
+    } finally { setProposalBusy(false); }
   }
 
   return (
@@ -89,7 +194,15 @@ function AiBubble({ m, onFeedback, onPreview }: { m: Msg; onFeedback?: (mid: str
         </div>
 
         {analysis && (
-          <details open={open} className="ref-chat-detail" onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}><summary><span className="flex items-center gap-1.5"><InsightIcon />分析思路与策略</span><ChevronIcon open={open} /></summary><p><RichText text={analysis} /></p></details>
+          <details open={open} className="ref-chat-detail" onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}><summary><span className="flex items-center gap-1.5"><InsightIcon />分析思路与策略</span><ChevronIcon open={open} /></summary><div className="ref-chat-detail-content"><RichText text={analysis} /></div></details>
+        )}
+
+        {m.retrieved && m.retrieved.length > 0 && (
+          <details className="ref-chat-detail mt-2"><summary><span className="flex items-center gap-1.5"><InsightIcon />参考门店资料（{m.retrieved.length}）</span><ChevronIcon open={false} /></summary><div className="ref-chat-detail-content">{m.retrieved.map((item, index) => <span key={`${item.chunkId || index}`} className="mb-1 block">{index + 1}. {item.documentTitle ? `《${item.documentTitle}》：` : ""}{item.snippet}</span>)}</div></details>
+        )}
+
+        {m.methodology && m.methodology.length > 0 && (
+          <details className="ref-chat-detail mt-2"><summary><span className="flex items-center gap-1.5"><InsightIcon />系统销售方法论（{m.methodology.length}）</span><ChevronIcon open={false} /></summary><div className="ref-chat-detail-content">{m.methodology.map((item, index) => <span key={`${item.id || item.scenarioKey || index}`} className="mb-1 block">{index + 1}. 《{item.title}》{item.module ? ` · ${item.module}` : ""}{item.source ? `\n来源：${item.source}` : ""}</span>)}<div className="mt-1 text-[11px] text-[var(--faint)]">仅用于销售判断与沟通策略；门店资料、价格与服务规则优先。</div></div></details>
         )}
 
         {(m.answerType || m.riskLevel) && (
@@ -107,13 +220,33 @@ function AiBubble({ m, onFeedback, onPreview }: { m: Msg; onFeedback?: (mid: str
           </div>
         )}
 
+        {proposal ? (
+          <div className="mt-2 rounded-xl border border-[var(--green-light)] bg-[var(--green-soft)]/60 p-3 text-[12px] text-[var(--muted)]">
+            <div className="font-semibold text-[var(--green-dark)]">待确认跟进建议</div>
+            <div className="mt-1 text-[var(--ink)]">{proposal.title}</div>
+            <div className="mt-1 text-[11px]">负责人：{proposal.assignedTo ? "已设置（可调整）" : "待设置"} · {proposal.priority === "urgent" ? "紧急" : proposal.priority === "high" ? "重要" : "普通"} · 截止：{proposal.dueAt ? new Date(proposal.dueAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "待设置"}</div>
+            {proposal.status === "pending" ? (
+              <>
+                {editingProposal && onUpdateAction && <ActionProposalEditor proposal={proposal} busy={proposalBusy} onSave={updateAction} onCancel={() => setEditingProposal(false)} />}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button onClick={() => setEditingProposal((value) => !value)} disabled={proposalBusy} className="rounded-full border border-[var(--green-light)] bg-white px-3 py-1.5 text-[11px] disabled:opacity-50">调整待办</button>
+                  <button onClick={() => void resolveAction("reject")} disabled={proposalBusy} className="rounded-full border border-[var(--line)] bg-white px-3 py-1.5 text-[11px] disabled:opacity-50">暂不创建</button>
+                  <button onClick={() => void resolveAction("apply")} disabled={proposalBusy} className="rounded-full bg-[var(--green)] px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-50">{proposalBusy ? "处理中…" : "确认创建待办"}</button>
+                </div>
+              </>
+            ) : <div className="mt-2 text-[11px] text-[var(--green-dark)]">{proposal.status === "applied" ? "已创建跟进待办" : "已选择暂不创建"}</div>}
+          </div>
+        ) : canCreateAction && onCreateAction && (
+          <button onClick={() => void createAction()} disabled={proposalBusy} className="mt-2 rounded-full border border-[var(--green-light)] bg-white px-3 py-1.5 text-[11px] font-medium text-[var(--green-dark)] disabled:opacity-50">{proposalBusy ? "正在生成待办…" : "将建议转为待办"}</button>
+        )}
+
         <div className="ref-feedback">
-          {[{ label: "已接受", helpful: true }, { label: "已预约", helpful: true }, { label: "仍有顾虑", helpful: false }, { label: "需要升级", helpful: false }].map((item) => <button
-            key={item.label}
-            onClick={() => clickFeedback(item.label, item.helpful)}
+          {["已接受", "已预约", "仍有顾虑", "信息有误", "需要升级"].map((label) => <button
+            key={label}
+            onClick={() => void clickFeedback(label)}
             disabled={Boolean(fb)}
-            className={`transition-colors ${fb === item.label ? item.helpful ? "border-[#8cd5a4] bg-[#e8f5e9] text-[#006d37]" : "border-[#efbdb6] bg-[#fff0ed] text-[#c4392e]" : "hover:border-[#8cd5a4] hover:text-[#006d37]"}`}
-          >{item.label}</button>)}
+            className={`transition-colors ${fb === label ? (label === "已接受" || label === "已预约") ? "border-[#8cd5a4] bg-[#e8f5e9] text-[#006d37]" : "border-[#efbdb6] bg-[#fff0ed] text-[#c4392e]" : "hover:border-[#8cd5a4] hover:text-[#006d37]"}`}
+          >{label}</button>)}
         </div>
       </div>
     </div>
@@ -173,12 +306,45 @@ export function ChatClient({
   const autoSentRef = useRef(false);
 
   // AI 回答反馈处理
-  const handleFeedback = useCallback(async (messageId: string, isHelpful: boolean) => {
+  const handleFeedback = useCallback(async (messageId: string, feedbackType: string, comment?: string) => {
     try {
-      await submitAiFeedback({ messageId, isHelpful });
+      const result = await chatApi.feedback(messageId, feedbackType, comment);
+      return result.ok;
     } catch {
-      // 静默失败，不影响体验
+      return false;
     }
+  }, []);
+
+  const handleCreateAction = useCallback(async (messageId: string) => {
+    const result = await chatApi.createActionProposal(messageId);
+    if (!result.ok || !result.data) {
+      alert(result.error || "暂时无法生成待办建议");
+      return null;
+    }
+    return result.data;
+  }, []);
+
+  const handleResolveAction = useCallback(async (proposalId: string, decision: "apply" | "reject") => {
+    const result = decision === "apply"
+      ? await chatApi.applyActionProposal(proposalId)
+      : await chatApi.rejectActionProposal(proposalId);
+    if (!result.ok || !result.data) {
+      alert(result.error || "处理待办建议失败");
+      return null;
+    }
+    return result.data;
+  }, []);
+
+  const handleUpdateAction = useCallback(async (
+    proposalId: string,
+    input: Pick<AiActionProposal, "title" | "content" | "assignedTo" | "priority" | "dueAt">,
+  ) => {
+    const result = await chatApi.updateActionProposal(proposalId, input);
+    if (!result.ok || !result.data) {
+      alert(result.error || "保存待办建议失败");
+      return null;
+    }
+    return result.data;
   }, []);
 
   useEffect(() => {
@@ -206,7 +372,7 @@ export function ChatClient({
       setSessionId(d.sessionId);
       setMessages((m) => [
         ...m,
-        { id: d.messageId, role: "ai", text: d.answer, riskLevel: d.riskLevel, answerType: d.answerType },
+        { id: d.messageId, role: "ai", text: d.answer, riskLevel: d.riskLevel, answerType: d.answerType, retrieved: d.retrieved, methodology: d.methodology },
       ]);
       if (wasNew) {
         router.replace(chatHref({ nextSessionId: d.sessionId }));
@@ -285,7 +451,8 @@ export function ChatClient({
               </div>
             </div>
           ) : (
-            <AiBubble key={m.id} m={m} onFeedback={handleFeedback} onPreview={previewMessage} />
+            <AiBubble key={m.id} m={m} onFeedback={handleFeedback} onPreview={previewMessage}
+              canCreateAction={Boolean(customerId)} onCreateAction={handleCreateAction} onResolveAction={handleResolveAction} onUpdateAction={handleUpdateAction} />
           )
         )}
         {loading && (

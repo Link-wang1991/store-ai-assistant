@@ -20,7 +20,8 @@ export function hasPermission(ctx: AuthContext, module: PermModule, action: Perm
   }
   // 无配置 → 按 base_role 兜底
   if (ctx.baseRole === "owner") return true;
-  if (ctx.baseRole === "manager") return module === "permissions" ? action === "view" : true;
+  // admin 是早期演示库保留的管理岗位，按店长权限处理，避免切换后落入员工页。
+  if (ctx.baseRole === "manager" || ctx.baseRole === "admin") return module === "permissions" ? action === "view" : true;
   if (action === "view" && ["workbench", "knowledge", "campaigns", "projects", "schedules"].includes(module)) {
     return true;
   }
@@ -31,7 +32,7 @@ export function getDataScope(ctx: AuthContext, module: PermModule): string {
   const p = ctx.permissions?.[module];
   if (p?.data_scope) return p.data_scope;
   if (ctx.baseRole === "owner") return "all";
-  if (ctx.baseRole === "manager") return "store";
+  if (ctx.baseRole === "manager" || ctx.baseRole === "admin") return "store";
   return "self";
 }
 
@@ -47,7 +48,7 @@ export function requirePermission(ctx: AuthContext, module: PermModule, action: 
 // 关键：不走 base_role 兜底——普通员工（咨询师/美容师/前台）即使兜底有 knowledge/workbench view，
 // 也不得进入 /admin，只能在 /work 看「我今天最该跟进」。
 export function canEnterAdmin(ctx: AuthContext): boolean {
-  if (ctx.baseRole === "owner" || ctx.baseRole === "manager") return true;
+  if (ctx.baseRole === "owner" || ctx.baseRole === "manager" || ctx.baseRole === "admin") return true;
   for (const m of ["reports", "customers"] as const) {
     const p = ctx.permissions?.[m];
     if (

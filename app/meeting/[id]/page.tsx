@@ -21,9 +21,49 @@ const ROLE_LABEL: Record<string, string> = {
   employee: "员工", customer: "客户", manager: "店长", other: "其他",
 };
 
-function clean(v: any): string {
-  if (typeof v !== "string") return String(v ?? "");
-  return v.replace(/\*\*/g, "").replace(/^#{1,6}\s*/gm, "").replace(/^\s*[-*]\s+/gm, "· ").trim();
+function narrativeParts(value: any): string[] {
+  const flatten = (item: any): string[] => {
+    if (item === null || item === undefined || item === "") return [];
+    if (Array.isArray(item)) return item.flatMap(flatten);
+    if (typeof item === "object") return Object.values(item).flatMap(flatten);
+    let text = String(item).trim();
+    if ((text.startsWith("[") && text.endsWith("]")) || (text.startsWith("{") && text.endsWith("}"))) {
+      try { return flatten(JSON.parse(text)); } catch { /* 普通文本包含括号时保留原文 */ }
+    }
+    text = text
+      .replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n")
+      .replace(/\*\*/g, "").replace(/^#{1,6}\s*/gm, "")
+      .replace(/^\s*(?:[-*•·]|\d+[.、])\s*/gm, "")
+      .trim();
+    if (text.length >= 2 && ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("“") && text.endsWith("”")))) {
+      text = text.slice(1, -1).trim();
+    }
+    return text.split(/\n{2,}|\n/).map(part => part.trim()).filter(Boolean);
+  };
+  return flatten(value);
+}
+
+function clean(value: any): string {
+  return narrativeParts(value).join("\n");
+}
+
+function NarrativeText({ value, className = "" }: { value: any; className?: string }) {
+  const parts = narrativeParts(value);
+  if (parts.length === 0) return null;
+  return <div className={className}>{parts.map((part, index) => <p key={`${index}-${part.slice(0, 12)}`} className={index ? "mt-2" : ""}>{part}</p>)}</div>;
+}
+
+function expandAnalysis(row: any) {
+  if (!row || typeof row !== "object") return row;
+  let report: Record<string, any> = {};
+  if (row.report && typeof row.report === "object" && !Array.isArray(row.report)) report = row.report;
+  if (typeof row.report === "string") {
+    try {
+      const parsed = JSON.parse(row.report);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) report = parsed;
+    } catch { /* 历史报告格式异常时继续使用数据库列 */ }
+  }
+  return { ...report, ...row };
 }
 
 function OverviewItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
@@ -38,9 +78,9 @@ function OverviewItem({ icon, label, value }: { icon: React.ReactNode; label: st
   );
 }
 
-function AnalysisCard({ icon, title, content, accent = "green" }: { icon: React.ReactNode; title: string; content: string | null | any[]; accent?: string }) {
+function AnalysisCard({ icon, title, content, accent = "green" }: { icon: React.ReactNode; title: string; content: any; accent?: string }) {
   // [] 空数组也视为无数据
-  if (!content || (Array.isArray(content) && content.length === 0)) return null;
+  if (narrativeParts(content).length === 0) return null;
   const accentMap: Record<string, { bg: string; text: string; border: string }> = {
     green: { bg: "bg-[var(--green-soft)]", text: "text-[var(--green)]", border: "border-emerald-100" },
     yellow: { bg: "bg-[var(--yellow-soft)]", text: "text-[var(--yellow)]", border: "border-amber-100" },
@@ -54,8 +94,19 @@ function AnalysisCard({ icon, title, content, accent = "green" }: { icon: React.
         <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${a.bg} ${a.text}`}>{icon}</div>
         <span className="text-[13px] font-semibold text-[var(--ink)]">{title}</span>
       </div>
-      <p className="text-[12px] leading-relaxed text-[var(--muted)]">{clean(content)}</p>
+      <NarrativeText value={content} className="text-[12px] leading-relaxed text-[var(--muted)]" />
     </div>
+  );
+}
+
+function ReviewBlock({ title, content, hint }: { title: string; content: any; hint?: string }) {
+  if (narrativeParts(content).length === 0) return null;
+  return (
+    <section className="rounded-xl border border-[var(--line)] bg-white p-3.5">
+      <h3 className="text-[13px] font-semibold text-[var(--ink)]">{title}</h3>
+      {hint && <p className="mt-1 text-[10px] leading-relaxed text-[var(--faint)]">{hint}</p>}
+      <NarrativeText value={content} className="mt-2 text-[13px] leading-relaxed text-[var(--muted)]" />
+    </section>
   );
 }
 
@@ -151,8 +202,18 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
   const [customerSearch, setCustomerSearch] = useState("");
   const [allCustomers, setAllCustomers] = useState<any[]>([]);
   const [savingCustomer, setSavingCustomer] = useState(false);
+  const [editingTranscriptId, setEditingTranscriptId] = useState<string | null>(null);
+  const [transcriptDraft, setTranscriptDraft] = useState("");
+  const [savingTranscript, setSavingTranscript] = useState(false);
+  const [pendingLocalUpload, setPendingLocalUpload] = useState(false);
+  const [reconcilingAction, setReconcilingAction] = useState(false);
+  const [retryingClosure, setRetryingClosure] = useState(false);
+  const [updatingSpeaker, setUpdatingSpeaker] = useState("");
   const [tab, setTab] = useState<"analysis" | "deep_review" | "distill" | "transcript">("analysis");
-  const { isRecording, isPaused, isStopping, timer, pauseRecording, resumeRecording, stopRecording, meetingId: recMeetingId } = useRecording();
+  const {
+    isRecording, isPaused, isStopping, timer, pauseRecording, resumeRecording, stopRecording, meetingId: recMeetingId,
+    hasPendingUpload, retryPendingUpload, discardPendingUpload,
+  } = useRecording();
   const isCurrentRecording = isRecording && recMeetingId === meetingId;
 
   useEffect(() => {
@@ -177,12 +238,18 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
       setM(meeting);
       if (ar.status === "fulfilled" && ar.value?.ok && ar.value.data) {
         const list = ar.value.data;
-        setAnalysis(Array.isArray(list) && list.length > 0 ? list[0] : list);
+        setAnalysis(expandAnalysis(Array.isArray(list) && list.length > 0 ? list[0] : list));
       }
       if (tr.status === "fulfilled" && tr.value?.ok && Array.isArray(tr.value.data)) setTrans(tr.value.data);
       setLoading(false);
     });
   }, [router, meetingId]);
+
+  useEffect(() => {
+    let alive = true;
+    hasPendingUpload(meetingId).then((exists) => { if (alive) setPendingLocalUpload(exists); }).catch(() => {});
+    return () => { alive = false; };
+  }, [hasPendingUpload, meetingId]);
 
   if (loading) return (
     <div className="flex h-screen items-center justify-center bg-[var(--page)]">
@@ -215,13 +282,132 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
       });
       const res = await response.json().catch(() => ({}));
       if (response.ok && res.code === 200) {
-        router.refresh();
+        setM((current: any) => current ? { ...current, status: "queued", transcript_status: "pending", fail_reason: null } : current);
       } else {
         alert(res.message || "重新提交转写失败");
       }
     } finally {
       setRetrying(false);
     }
+  }
+
+  async function handleRetryLocalUpload() {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      const result = await retryPendingUpload(meetingId);
+      if (!result.ok) throw new Error(result.error || "重新上传失败");
+      setPendingLocalUpload(false);
+      setM((current: any) => current ? { ...current, status: "queued", transcript_status: "pending", fail_reason: null } : current);
+    } catch (error: any) {
+      alert(error?.message || "重新上传失败");
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  async function handleActionReconciliation(decision: "apply" | "keep") {
+    if (reconcilingAction) return;
+    setReconcilingAction(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}/action-reconciliation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ decision }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.code !== 200) throw new Error(result.message || "更新跟进计划失败");
+      setM((current: any) => current ? { ...current, action_review_status: result.data?.action_review_status } : current);
+      alert(result.data?.message || "已保存处理结果");
+    } catch (error: any) {
+      alert(error?.message || "更新跟进计划失败");
+    } finally {
+      setReconcilingAction(false);
+    }
+  }
+
+  async function handleRetryClosure() {
+    if (retryingClosure) return;
+    setRetryingClosure(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}/retry-closure`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.code !== 200) throw new Error(result.message || "重试业务闭环失败");
+      setM((current: any) => current ? {
+        ...current,
+        closure_status: result.data?.closure_status,
+        closure_error: result.data?.error || null,
+      } : current);
+      alert(result.data?.closure_status === "completed" ? "会谈任务、记忆与审核动作已补齐。" : "仍有部分业务动作未完成，请稍后再次重试。");
+    } catch (error: any) {
+      alert(error?.message || "重试业务闭环失败");
+    } finally {
+      setRetryingClosure(false);
+    }
+  }
+
+  async function handleReanalyze() {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}/reanalyze`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const res = await response.json().catch(() => ({}));
+      if (response.ok && res.code === 200) {
+        setM((current: any) => current ? { ...current, status: "analyzing", analysis_status: "reprocessing", fail_reason: null } : current);
+      } else {
+        alert(res.message || "重新分析失败");
+      }
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  async function saveTranscript(t: any) {
+    const content = transcriptDraft.trim();
+    if (!content || savingTranscript) return;
+    setSavingTranscript(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}/transcripts/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ content }),
+      });
+      const res = await response.json().catch(() => ({}));
+      if (!response.ok || res.code !== 200) throw new Error(res.message || "保存修订失败");
+      setTrans((current) => current.map((item) => item.id === t.id
+        ? { ...item, content, edited_at: new Date().toISOString() }
+        : item));
+      setM((current: any) => current ? { ...current, analysis_status: "needs_reanalysis" } : current);
+      setEditingTranscriptId(null);
+    } catch (e: any) {
+      alert(e.message || "保存修订失败");
+    } finally {
+      setSavingTranscript(false);
+    }
+  }
+
+  async function saveSpeakerRole(speaker: string, role: string) {
+    if (!speaker || updatingSpeaker) return;
+    setUpdatingSpeaker(speaker);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}/speakers/${encodeURIComponent(speaker)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ role }),
+      });
+      const res = await response.json().catch(() => ({}));
+      if (!response.ok || res.code !== 200) throw new Error(res.message || "保存说话人身份失败");
+      setTrans((current) => current.map((item) => item.speaker === speaker ? { ...item, speaker_role: role || null } : item));
+      setM((current: any) => current ? { ...current, analysis_status: "needs_reanalysis" } : current);
+    } catch (error: any) {
+      alert(error?.message || "保存说话人身份失败");
+    } finally { setUpdatingSpeaker(""); }
   }
 
   // 优先用后端保存的 duration，其次从转写时间差计算
@@ -243,6 +429,10 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
   if (analysis?.suggested_script) distill.push({ title: `${sceneName} · 有效回应话术`, content: analysis.suggested_script });
   if (analysis?.employee_did_well) distill.push({ title: `${sceneName} · 值得复制的做法`, content: analysis.employee_did_well });
   if (analysis?.followup_goal) distill.push({ title: `${sceneName} · 跟进流程`, content: analysis.followup_goal });
+  const speakerGroups = Array.from(new Map(trans
+    .filter((item: any) => item.speaker)
+    .map((item: any) => [item.speaker, { speaker: item.speaker, role: item.speaker_role || "" }]))
+    .values());
 
   return (
     <div className="min-h-screen bg-[var(--page)] pb-20">
@@ -380,7 +570,7 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
         {m.status !== "done" ? (
           ["queued", "submitting", "transcribing", "analyzing"].includes(m.status) ? (
             <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
-              <MeetingProcessing id={meetingId} initialStatus={m.status} />
+              <MeetingProcessing id={meetingId} initialStatus={m.status} onCompleted={() => window.location.reload()} />
               {m.status === "transcribing" && !m.asr_task_id && (
                 <div className="mt-4 border-t border-[var(--line)] pt-3 text-center">
                   <button
@@ -401,7 +591,17 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
                 {m.status === "failed" ? (
                   <>
                     <p className="mt-1">{m.fail_reason || "转写未能识别到有效语音，建议重新录制一段。"}</p>
-                    {m.audio_url && <button onClick={handleRetryTranscription} disabled={retrying} className="mt-2 mr-2 rounded-full border border-[var(--green)] px-4 py-1.5 text-[12px] font-medium text-[var(--green)] disabled:opacity-50">{retrying ? "提交中…" : "重新提交转写"}</button>}
+                    {pendingLocalUpload ? (
+                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-800">
+                        <p>这段录音仍安全保留在本设备，尚未上传到服务器。</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button onClick={handleRetryLocalUpload} disabled={retrying} className="rounded-full bg-[var(--green)] px-3 py-1.5 font-medium text-white disabled:opacity-50">{retrying ? "上传中…" : "重新上传当前录音"}</button>
+                          <button onClick={async () => { await discardPendingUpload(meetingId); setPendingLocalUpload(false); }} disabled={retrying} className="rounded-full border border-amber-300 px-3 py-1.5 text-amber-800 disabled:opacity-50">放弃本地录音</button>
+                        </div>
+                      </div>
+                    ) : m.transcript_status === "done" ? (
+                      <button onClick={handleReanalyze} disabled={retrying} className="mt-2 mr-2 rounded-full border border-[var(--green)] px-4 py-1.5 text-[12px] font-medium text-[var(--green)] disabled:opacity-50">{retrying ? "提交中…" : "重新分析"}</button>
+                    ) : m.audio_url && <button onClick={handleRetryTranscription} disabled={retrying} className="mt-2 mr-2 rounded-full border border-[var(--green)] px-4 py-1.5 text-[12px] font-medium text-[var(--green)] disabled:opacity-50">{retrying ? "提交中…" : "重新提交转写"}</button>}
                     <Link href="/meeting" className="mt-2 inline-block rounded-full bg-[var(--green)] px-4 py-1.5 text-[12px] font-medium text-white">去重新录音</Link>
                   </>
                 ) : m.status === "recording" ? (
@@ -444,8 +644,25 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
             {(analysis.followup_goal || analysis.suggested_script) && (
               <div className="mt-3 rounded-2xl border border-[var(--green)]/20 bg-[var(--green-soft)]/40 p-4">
                 <div className="mb-2 text-[14px] font-semibold text-[var(--green-dark)]">下一步跟进</div>
-                {analysis.followup_goal && <div className="mb-2"><div className="text-[11px] text-[var(--faint)]">跟进目标</div><div className="text-[13px] leading-relaxed text-[var(--muted)]">{clean(analysis.followup_goal)}</div></div>}
-                {analysis.suggested_script && <div><div className="text-[11px] text-[var(--faint)]">建议话术</div><div className="detail-inner-surface mt-1 p-3 text-[13px] leading-relaxed text-[var(--ink)]">{clean(analysis.suggested_script)}</div></div>}
+                {analysis.followup_goal && <div className="mb-2"><div className="text-[11px] text-[var(--faint)]">跟进目标</div><NarrativeText value={analysis.followup_goal} className="text-[13px] leading-relaxed text-[var(--muted)]" /></div>}
+                {analysis.suggested_script && <div><div className="text-[11px] text-[var(--faint)]">建议话术</div><NarrativeText value={analysis.suggested_script} className="detail-inner-surface mt-1 p-3 text-[13px] leading-relaxed text-[var(--ink)]" /></div>}
+              </div>
+            )}
+            {m.action_review_status === "pending" && (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <div className="text-[14px] font-semibold text-amber-900">转写修订后，跟进计划已变化</div>
+                <p className="mt-1 text-[12px] leading-relaxed text-amber-800">为避免覆盖已执行的客户动作，系统没有自动修改原任务。请确认采用当前报告的建议，或保留原计划。</p>
+                <div className="mt-3 flex gap-2">
+                  <button onClick={() => void handleActionReconciliation("keep")} disabled={reconcilingAction} className="flex-1 rounded-full border border-amber-300 bg-white px-3 py-2 text-[12px] font-medium text-amber-900 disabled:opacity-50">保留原计划</button>
+                  <button onClick={() => void handleActionReconciliation("apply")} disabled={reconcilingAction} className="flex-1 rounded-full bg-[var(--green)] px-3 py-2 text-[12px] font-medium text-white disabled:opacity-50">{reconcilingAction ? "处理中…" : "应用新计划"}</button>
+                </div>
+              </div>
+            )}
+            {m.closure_status === "partial_failed" && (
+              <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-4">
+                <div className="text-[14px] font-semibold text-red-800">会谈报告已生成，但部分业务动作未完成</div>
+                <p className="mt-1 text-[12px] leading-relaxed text-red-700">{m.closure_error || "任务、客户记忆或审核动作需要重新执行。"}</p>
+                <button onClick={() => void handleRetryClosure()} disabled={retryingClosure} className="mt-3 rounded-full bg-[var(--green)] px-3 py-2 text-[12px] font-medium text-white disabled:opacity-50">{retryingClosure ? "正在补齐…" : "重试业务闭环"}</button>
               </div>
             )}
           </>
@@ -456,11 +673,20 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
       {/* 深度复盘 Tab */}
       {tab === "deep_review" && m.status === "done" && hasAnalysis && (
       <div className="mx-4 mt-4">
-        {(analysis.emotional_needs || analysis.employee_to_improve) ? (
-          <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
-            <div className="mb-3 text-[14px] font-semibold text-[var(--ink)]">深度复盘</div>
-            {analysis.emotional_needs && <div className="mb-3"><div className="text-[11px] text-[var(--faint)]">情绪 / 深层需求</div><div className="text-[13px] leading-relaxed text-[var(--muted)]">{clean(analysis.emotional_needs)}</div></div>}
-            {analysis.employee_to_improve && <div><div className="text-[11px] text-[var(--faint)]">不到位 / 后续要规避的</div><div className="text-[13px] leading-relaxed text-[var(--muted)]">{clean(analysis.employee_to_improve)}</div></div>}
+        {(analysis.emotional_needs || analysis.employee_to_improve || analysis.professional_assessment || analysis.judgement_basis) ? (
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
+              <div className="text-[15px] font-semibold text-[var(--ink)]">深度复盘</div>
+              <p className="mt-1 text-[11px] leading-relaxed text-[var(--faint)]">先以逐句转写为事实依据；门店资料校准本店口径，系统销售方法论补充客户决策与沟通策略。两类依据会分别标明，推断不会当作客户已确认的信息。</p>
+            </div>
+            <ReviewBlock title="客户决策与深层需求" content={analysis.customer_decision_stage || analysis.emotional_needs} />
+            <ReviewBlock title="本次判断依据" content={analysis.judgement_basis} hint="围绕需求挖掘、价值呈现、异议处理、成交推进、合规与服务体验逐项回看。" />
+            <ReviewBlock title="做得对的地方" content={analysis.employee_did_well} />
+            <ReviewBlock title="需要补强与错失机会" content={[analysis.employee_to_improve, analysis.missed_opportunities, analysis.decision_barriers]} />
+            <ReviewBlock title="专业分析思路" content={analysis.professional_assessment} />
+            <ReviewBlock title="本次使用的门店资料" content={analysis.knowledge_basis} />
+            <ReviewBlock title="本次使用的系统销售方法论" content={analysis.methodology_basis} hint="系统方法论只用于销售判断与沟通策略，不替代门店价格、服务与合规口径。" />
+            <ReviewBlock title="下一步行动方案" content={analysis.next_step_plan || analysis.followup_goal} />
           </div>
         ) : (
           <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
@@ -473,7 +699,7 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
       {/* 沉淀经验 Tab */}
       {tab === "distill" && m.status === "done" && (
       <div className="mx-4 mt-4">
-        <ExperienceDistill candidates={distill} />
+        <ExperienceDistill candidates={distill} meetingId={meetingId} />
       </div>
       )}
 
@@ -481,8 +707,31 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
       {tab === "transcript" && (<>
       {trans.length > 0 ? (<section id="transcript" className="mx-4 mt-4">
           <div className="mb-3 rounded-2xl border border-[var(--green-light)] bg-[var(--green-soft)] p-3.5">
-            <h2 className="text-[15px] font-semibold text-[var(--ink)]">逐字转写原文</h2>
-            <p className="mt-1 text-[12px] leading-relaxed text-[var(--muted)]">以下内容按录音时间顺序保存，未经过 AI 总结或改写；分析报告基于这些原文生成。</p>
+            <h2 className="text-[15px] font-semibold text-[var(--ink)]">逐句转写与修订</h2>
+            <p className="mt-1 text-[12px] leading-relaxed text-[var(--muted)]">这里保留语音识别返回的逐句原文；修订后会以修订版重新生成报告，原始识别内容仍可展开查看。</p>
+            {speakerGroups.length > 0 && (
+              <div className="mt-3 rounded-xl border border-[var(--line)] bg-white p-3">
+                <div className="text-[12px] font-medium text-[var(--ink)]">确认说话人身份</div>
+                <p className="mt-0.5 text-[10px] leading-relaxed text-[var(--faint)]">系统会先自动判断；如有误，请改正后重新分析，报告会优先使用你的标注。</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {speakerGroups.map((item: any) => (
+                    <label key={item.speaker} className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[11px] text-[var(--muted)]">
+                      <span>{transcriptSpeaker({ speaker: item.speaker })}</span>
+                      <select value={item.role} onChange={(e) => void saveSpeakerRole(item.speaker, e.target.value)} disabled={Boolean(updatingSpeaker)} className="bg-transparent font-medium text-[var(--green-dark)] outline-none disabled:opacity-50">
+                        <option value="">自动判断</option><option value="employee">员工</option><option value="customer">客户</option><option value="manager">店长</option><option value="other">其他</option>
+                      </select>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            {m.analysis_status === "needs_reanalysis" && (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-800">
+                <p>逐句转写已修订，当前报告仍基于修改前内容。</p>
+                <button onClick={handleReanalyze} disabled={retrying} className="mt-2 rounded-full bg-[var(--green)] px-3 py-1.5 font-medium text-white disabled:opacity-50">{retrying ? "正在提交…" : "用修订版重新分析"}</button>
+                <p className="mt-1 text-[10px] text-amber-700">重新分析不会重复创建任务；若跟进建议变化，会要求你确认后才更新原计划。</p>
+              </div>
+            )}
             {m.audio_url && (
               <div className="detail-inner-surface mt-3 p-2.5">
                 <div className="mb-1.5 text-[11px] font-medium text-[var(--muted)]">原始录音</div>
@@ -499,7 +748,30 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
                   <span className="text-[var(--green)]">{transcriptSpeaker(t)}</span>
                   <span className="font-normal text-[var(--faint)]">{transcriptTime(t.start_time)} – {transcriptTime(t.end_time)}</span>
                 </div>
-                <div className="text-[13px] text-[var(--muted)]">{t.content}</div>
+                {editingTranscriptId === t.id ? (
+                  <div className="mt-2">
+                    <textarea value={transcriptDraft} onChange={(e) => setTranscriptDraft(e.target.value)} rows={3}
+                      className="w-full rounded-xl border border-[var(--green)] bg-white px-3 py-2 text-[13px] leading-relaxed text-[var(--ink)] outline-none" />
+                    <div className="mt-2 flex justify-end gap-2">
+                      <button onClick={() => setEditingTranscriptId(null)} disabled={savingTranscript} className="rounded-full border border-[var(--line)] px-3 py-1.5 text-[11px] text-[var(--muted)]">取消</button>
+                      <button onClick={() => saveTranscript(t)} disabled={savingTranscript || !transcriptDraft.trim()} className="rounded-full bg-[var(--green)] px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-50">{savingTranscript ? "保存中…" : "保存修订"}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-[13px] text-[var(--muted)]">{t.content}</div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <button onClick={() => { setEditingTranscriptId(t.id); setTranscriptDraft(t.content || ""); }} className="text-[11px] font-medium text-[var(--green)]">修订此句</button>
+                      {t.edited_at && <span className="rounded-full bg-[var(--green-soft)] px-2 py-0.5 text-[10px] text-[var(--green)]">已修订</span>}
+                    </div>
+                    {t.original_content && t.original_content !== t.content && (
+                      <details className="mt-2 rounded-lg bg-[var(--surface-2)] px-2.5 py-2 text-[11px] text-[var(--faint)]">
+                        <summary className="cursor-pointer">查看语音识别原文</summary>
+                        <p className="mt-1 leading-relaxed">{t.original_content}</p>
+                      </details>
+                    )}
+                  </>
+                )}
               </div>
             ))}
           </div>

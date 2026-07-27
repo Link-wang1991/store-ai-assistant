@@ -96,6 +96,7 @@ export function ConfigCenter({ initial }: { initial: Record<string, ConfigItem[]
     setNewName("");
     setAdding(false);
   };
+  const newItemPlaceholder = active === "knowledge" ? "如：团购资料、价格体系、私域运营" : "输入显示名称";
 
   return (
     <div className="space-y-3">
@@ -158,7 +159,7 @@ export function ConfigCenter({ initial }: { initial: Record<string, ConfigItem[]
                 if (e.key === "Enter") saveNew();
                 if (e.key === "Escape") cancelAdd();
               }}
-              placeholder="输入显示名称"
+              placeholder={newItemPlaceholder}
               className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-[var(--green)]"
             />
             <button onClick={saveNew} disabled={!newName.trim()} className="shrink-0 rounded-lg bg-[var(--green-soft)] px-3 py-1.5 text-xs font-medium text-[var(--green-dark)] disabled:opacity-40">保存</button>
@@ -170,7 +171,7 @@ export function ConfigCenter({ initial }: { initial: Record<string, ConfigItem[]
       </div>
 
       <p className="px-0.5 text-[11px] text-[var(--faint)]">
-        每项支持：改名、启用/隐藏、员工是否可见、排序上移/下移、删除、新增。离散操作即时保存，改名在失焦时保存（code 不变，仅换显示名）。
+        每项支持：改名、启用/隐藏、员工是否可见、排序上移/下移、删除、新增。新增知识分类保存后会出现在上传页的精确分类下拉中；离散操作即时保存，改名在失焦时保存（code 不变，仅换显示名）。
       </p>
     </div>
   );

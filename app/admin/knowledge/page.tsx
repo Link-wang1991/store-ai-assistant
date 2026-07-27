@@ -12,11 +12,13 @@ import { KnowledgeCategoryEdit } from "@/components/KnowledgeCategoryEdit";
 import { EmptyState } from "@/components/ui";
 import { AdminBackHeader } from "@/components/AdminBackHeader";
 import { fmtDate } from "@/lib/format";
+import { KnowledgeReindexButton } from "@/components/KnowledgeReindexButton";
 
 export const dynamic = "force-dynamic";
 
 export default async function KnowledgeListPage() {
-  const ctx = (await getAuthContext())!;
+  const ctx = await getAuthContext();
+  if (!ctx) redirect("/login");
   if (!hasPermission(ctx, "knowledge", "view")) redirect("/admin");
   const canEdit = hasPermission(ctx, "knowledge", "edit");
   const docs = await db.knowledge.listDocs(ctx.store.id);
@@ -54,6 +56,7 @@ export default async function KnowledgeListPage() {
             分类管理
           </Link>
         </div>
+        {canEdit && <KnowledgeReindexButton />}
 
         {(docs || []).length === 0 ? (
           <EmptyState text="还没有上传任何资料，先上传门店的项目、话术、活动等资料吧" />

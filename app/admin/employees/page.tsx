@@ -27,6 +27,11 @@ export default async function EmployeesPage() {
     (defs as any[]).length > 0
       ? (defs as any[]).map((d) => ({ key: d.role_key, name: d.display_name }))
       : ROLES.map((r) => ({ key: r, name: roleLabel(r, labels) }));
+  // 老板账号只在门店注册时创建，不能在员工表里再创建一个“老板”。
+  // 新建员工只提供后端明确支持的五类岗位；已有员工的岗位编辑仍保留门店自定义岗位。
+  const newEmployeeRoleOptions = ROLES
+    .filter((role) => role !== "owner")
+    .map((role) => ({ key: role, name: roleLabel(role, labels) }));
   const empList = ((employees as any[]) || []).map((e) => ({ id: e.id, name: e.name }));
 
   const inputCls =
@@ -45,9 +50,8 @@ export default async function EmployeesPage() {
             <input name="email" type="email" placeholder="登录邮箱" className={inputCls} required />
             <input name="password" type="text" placeholder="初始密码（≥6位）" className={inputCls} required />
             <input name="phone" placeholder="手机号（选填）" className={inputCls} />
-            <input name="position" placeholder="岗位/职位（选填）" className={inputCls} />
-            <select name="role" className={inputCls} defaultValue={roleOptions[0]?.key}>
-              {roleOptions.map((o) => (
+            <select name="role" className={inputCls} defaultValue="consultant">
+              {newEmployeeRoleOptions.map((o) => (
                 <option key={o.key} value={o.key}>{o.name}</option>
               ))}
             </select>

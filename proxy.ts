@@ -9,6 +9,7 @@ export async function proxy(request: NextRequest) {
     path.startsWith("/_next") ||
     path.startsWith("/api/") ||
     path === "/login" ||
+    path.startsWith("/login/") ||
     path === "/register" ||
     path === "/manifest.webmanifest" ||
     path === "/favicon.ico";

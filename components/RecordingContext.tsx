@@ -25,9 +25,89 @@ let timerInterval: ReturnType<typeof setInterval> | null = null;
 let elapsed = 0;
 const MAX_AUDIO_BYTES = 60 * 1024 * 1024;
 const MIN_AUDIO_BYTES = 1024;
+const PENDING_AUDIO_DB = "store-ai-pending-meeting-audio";
+const PENDING_AUDIO_STORE = "uploads";
+
+type PendingAudioUpload = {
+  meetingId: string;
+  blob: Blob;
+  duration: number;
+  createdAt: number;
+};
+
+// IndexedDB 在页面跳转、网络短暂中断后仍可保留同一份录音；内存 Map 是
+// Safari 私密模式或存储配额不足时的短暂兜底。
+const pendingAudioMemory = new Map<string, PendingAudioUpload>();
 
 function notify() { listeners.forEach(l => l()); }
 function getSnap() { return storeState; }
+
+function openPendingAudioDb(): Promise<IDBDatabase | null> {
+  if (typeof window === "undefined" || !window.indexedDB) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(PENDING_AUDIO_DB, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(PENDING_AUDIO_STORE)) db.createObjectStore(PENDING_AUDIO_STORE, { keyPath: "meetingId" });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("无法打开本地录音暂存"));
+  });
+}
+
+async function savePendingAudio(upload: PendingAudioUpload) {
+  pendingAudioMemory.set(upload.meetingId, upload);
+  try {
+    const db = await openPendingAudioDb();
+    if (!db) return;
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(PENDING_AUDIO_STORE, "readwrite");
+      tx.objectStore(PENDING_AUDIO_STORE).put(upload);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error("本地录音暂存失败"));
+      tx.onabort = () => reject(tx.error || new Error("本地录音暂存被取消"));
+    });
+    db.close();
+  } catch {
+    // 内存副本仍可支持当前浏览器会话内的重传。
+  }
+}
+
+async function loadPendingAudio(meetingId: string): Promise<PendingAudioUpload | null> {
+  const memory = pendingAudioMemory.get(meetingId);
+  if (memory) return memory;
+  try {
+    const db = await openPendingAudioDb();
+    if (!db) return null;
+    const value = await new Promise<PendingAudioUpload | null>((resolve, reject) => {
+      const request = db.transaction(PENDING_AUDIO_STORE, "readonly").objectStore(PENDING_AUDIO_STORE).get(meetingId);
+      request.onsuccess = () => resolve((request.result as PendingAudioUpload | undefined) || null);
+      request.onerror = () => reject(request.error || new Error("读取本地录音暂存失败"));
+    });
+    db.close();
+    if (value) pendingAudioMemory.set(meetingId, value);
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+async function clearPendingAudio(meetingId: string) {
+  pendingAudioMemory.delete(meetingId);
+  try {
+    const db = await openPendingAudioDb();
+    if (!db) return;
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(PENDING_AUDIO_STORE, "readwrite");
+      tx.objectStore(PENDING_AUDIO_STORE).delete(meetingId);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error("清理本地录音暂存失败"));
+    });
+    db.close();
+  } catch {
+    // 清理失败不影响已上传的会谈；下次读取会覆盖同一 meetingId。
+  }
+}
 
 function cleanupStore() {
   streamRef?.getTracks().forEach(t => t.stop());
@@ -54,6 +134,35 @@ async function markUploadFailed(meetingId: string, reason: string) {
   }).catch(() => {});
 }
 
+async function uploadPendingAudio(upload: PendingAudioUpload) {
+  const ext = audioExt(upload.blob.type);
+  const form = new FormData();
+  form.append("file", upload.blob, `meeting-${upload.meetingId}.${ext}`);
+  form.append("duration", String(upload.duration));
+  const token = getToken();
+  const response = await fetch(`${API_BASE_URL}/api/meetings/${upload.meetingId}/audio`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.code !== 200) throw new Error(payload.message || "录音上传失败，请检查网络后重试。");
+}
+
+async function retryPendingAudioUpload(meetingId: string): Promise<{ ok: boolean; error?: string }> {
+  const upload = await loadPendingAudio(meetingId);
+  if (!upload) return { ok: false, error: "本设备未找到可重传的录音。若曾清除浏览器数据，请重新录音。" };
+  try {
+    await uploadPendingAudio(upload);
+    await clearPendingAudio(meetingId);
+    return { ok: true };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "录音上传失败，请稍后重试。";
+    await markUploadFailed(meetingId, reason);
+    return { ok: false, error: reason };
+  }
+}
+
 function preferredRecorderOptions(stream: MediaStream): MediaRecorderOptions | undefined {
   const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
   const mimeType = candidates.find((value) => MediaRecorder.isTypeSupported(value));
@@ -72,19 +181,10 @@ function makeOnStop(mid: string, router: any) {
     try {
       if (blob.size < MIN_AUDIO_BYTES) throw new Error("录音内容过短或没有采集到声音，请重新录音。");
       if (blob.size > MAX_AUDIO_BYTES) throw new Error("录音文件超过 60MB，请缩短本次会谈后重新录音。");
-
-      const ext = audioExt(blob.type);
-      const form = new FormData();
-      form.append("file", blob, `meeting-${mid}.${ext}`);
-      form.append("duration", String(elapsed));
-      const token = getToken();
-      const response = await fetch(`${API_BASE_URL}/api/meetings/${mid}/audio`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        body: form,
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || payload.code !== 200) throw new Error(payload.message || "录音上传失败，请检查网络后重试。");
+      const upload: PendingAudioUpload = { meetingId: mid, blob, duration: elapsed, createdAt: Date.now() };
+      await savePendingAudio(upload);
+      await uploadPendingAudio(upload);
+      await clearPendingAudio(mid);
     } catch (error) {
       uploadError = error instanceof Error ? error.message : "录音上传失败，请稍后重试。";
       await markUploadFailed(mid, uploadError);
@@ -187,6 +287,9 @@ interface RecordingContextValue {
   isRecording: boolean; isPaused: boolean; isStopping: boolean; timer: string; meetingId: string | null;
   startRecording: (opts: { isNewCustomer: boolean; customerId: string; customerName: string; scene: string }) => Promise<{ ok: boolean; error?: string }>;
   pauseRecording: () => void; resumeRecording: () => void; stopRecording: () => void;
+  hasPendingUpload: (meetingId: string) => Promise<boolean>;
+  retryPendingUpload: (meetingId: string) => Promise<{ ok: boolean; error?: string }>;
+  discardPendingUpload: (meetingId: string) => Promise<void>;
 }
 
 const RecordingContext = createContext<RecordingContextValue | null>(null);
@@ -220,11 +323,15 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
   const pauseRecording = useCallback(() => doPause(), []);
   const resumeRecording = useCallback(() => doResume(routerRef.current), []);
   const stopRecording = useCallback(() => doStop(), []);
+  const hasPendingUpload = useCallback(async (meetingId: string) => Boolean(await loadPendingAudio(meetingId)), []);
+  const retryPendingUpload = useCallback((meetingId: string) => retryPendingAudioUpload(meetingId), []);
+  const discardPendingUpload = useCallback((meetingId: string) => clearPendingAudio(meetingId), []);
 
   const value: RecordingContextValue = {
     isRecording: state.isRecording, isPaused: state.isPaused, isStopping: state.isStopping,
     timer: state.timer, meetingId: state.meetingId,
     startRecording, pauseRecording, resumeRecording, stopRecording,
+    hasPendingUpload, retryPendingUpload, discardPendingUpload,
   };
 
   return (

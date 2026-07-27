@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getToken, customerApi, taskApi, meetingApi } from "@/lib/api-client";
+import { getToken, homeApi, taskApi, memoryConfirmationApi } from "@/lib/api-client";
 import { assignPool, type PoolCustomer } from "@/lib/customer-pools";
 import { STAGE_LABEL } from "@/lib/opportunity";
 import { fmtDate } from "@/lib/format";
@@ -54,10 +54,14 @@ function toPoolCustomer(raw: any): PoolCustomer {
   };
 }
 
-function isFollowToday(nextFollowLabel?: string | null): boolean {
-  if (!nextFollowLabel) return false;
-  const today = fmtDate(new Date().toISOString());
-  return nextFollowLabel === today;
+function isToday(value: unknown): boolean {
+  if (!value) return false;
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return false;
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear()
+    && date.getMonth() === now.getMonth()
+    && date.getDate() === now.getDate();
 }
 
 export default function HomePage({ navItems }: { navItems: NavItem[] }) {
@@ -84,14 +88,19 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
     setUserName(payload.name || "同事");
     setLoading(true);
 
-    const [cr, tr, mr] = await Promise.allSettled([customerApi.list(), taskApi.list(), meetingApi.countUnanalyzed()]);
-      if (cr.status === "fulfilled" && cr.value.ok) {
-        const raw = cr.value.data || [];
-        setCusts(raw.map((c: any) => toPoolCustomer(c)));
-      }
-      if (tr.status === "fulfilled" && tr.value.ok) setTasks(tr.value.data || []);
-      if (mr.status === "fulfilled" && mr.value.ok) setReviewCount((mr.value.data as any)?.count ?? 0);
-      setLoading(false);
+    const result = await homeApi.overview();
+    if (!result.ok) {
+      setNotice(result.error || "首页工作项读取失败，请稍后刷新。");
+      setCusts([]);
+      setTasks([]);
+      setReviewCount(0);
+    } else {
+      const overview = result.data;
+      setCusts((overview?.customers || []).map((customer: any) => toPoolCustomer(customer)));
+      setTasks(overview?.tasks || []);
+      setReviewCount(Number(overview?.pending_experience_reviews || 0));
+    }
+    setLoading(false);
   }, [router]);
 
   useEffect(() => { void loadData(); }, [loadData]);
@@ -99,7 +108,8 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
   const stats = useMemo(() => {
     const actionable = custs.filter((c) => c.pool !== "regular");
     const priority = actionable.length;
-    const followup = tasks.filter((t) => t.status === "todo" || t.status === "overdue").length || actionable.length;
+    const followup = tasks.filter((t) => (t.status === "todo" || t.status === "doing" || t.status === "overdue")
+      && isToday(t.due_at || t.dueAt || t.deadline)).length;
     const todayVisit = custs.filter((c) => c.pool === "today").length;
     return {
       priority: priority || 0,
@@ -129,12 +139,33 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
 
   const startTask = async (task: any) => {
     if (task.id) await taskApi.updateStatus(task.id, "doing");
-    router.push(`/chat?new=1&q=${encodeURIComponent(task.content || task.title || "请帮我完成这项跟进任务")}`);
+    const params = new URLSearchParams({
+      new: "1",
+      q: task.content || task.title || "请帮我完成这项跟进任务",
+    });
+    const customerId = task.customer_id || task.customerId || task.customer?.id;
+    if (customerId) params.set("customerId", String(customerId));
+    router.push(`/chat?${params.toString()}`);
   };
   const postponeTask = async (task: any) => {
     if (task.id && task.status === "doing") await taskApi.updateStatus(task.id, "todo");
     setNotice("已保留为待跟进任务，可在稍后继续处理。");
     window.setTimeout(() => setNotice(""), 2600);
+    await loadData();
+  };
+  const confirmMemory = async (task: any, confirmed: boolean, correctedValue?: string) => {
+    if (!task.id) return;
+    const result = await memoryConfirmationApi.confirm(task.id, confirmed, correctedValue);
+    if (!result.ok) {
+      setNotice(result.error || "记忆处理失败，请稍后重试。");
+    } else if (correctedValue?.trim()) {
+      setNotice("已修正并确认客户记忆，后续 AI 建议会使用新内容。");
+    } else if (confirmed) {
+      setNotice("已确认客户记忆，后续 AI 建议会使用该信息。");
+    } else {
+      setNotice("已拒绝这条不可靠的客户记忆，它不会进入后续建议。");
+    }
+    window.setTimeout(() => setNotice(""), 3200);
     await loadData();
   };
 
@@ -164,7 +195,7 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
           </section>
           <label className="ref-search">
             <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.2-4.2"/></svg>
-            <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" aria-label="搜索客户、会谈、知识库、话术或任务" placeholder="搜索客户、会谈、知识、话术或任务" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" aria-label="搜索客户或待办任务" placeholder="搜索客户或待办任务" />
           </label>
           <div className="ref-summary-grid">
           <StatCard
@@ -202,7 +233,7 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
                 <polyline points="9 22 9 12 15 12 15 22" />
               </svg>
             }
-            label="今日到店客户"
+            label="今日到店/预约"
             value={`${stats.todayVisit} 位`}
             sub="需服务闭环"
             tone="blue"
@@ -214,11 +245,11 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
               </svg>
             }
-            label="待复盘会谈"
+            label="待审核经验"
             value={`${stats.review} 条`}
-            sub="可沉淀经验"
+            sub="待负责人审核"
             tone="purple"
-            href="/meeting"
+            href={(role === "owner" || role === "admin" || role === "manager") ? "/admin/experience-reviews" : "/meeting"}
           />
           </div>
 
@@ -256,7 +287,7 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
               )
             ) : (
               visibleTasks.slice(0, 8).map((t) => (
-                <TaskInboxCard key={t.id} task={t} userName={userName} onStart={startTask} onPostpone={postponeTask} />
+                <TaskInboxCard key={t.id} task={t} userName={userName} onStart={startTask} onPostpone={postponeTask} onConfirmMemory={confirmMemory} />
               ))
             )}
           </div>
@@ -310,9 +341,10 @@ function StatCard({
   );
 }
 
-function TaskInboxCard({ task, userName, onStart, onPostpone }: { task: any; userName: string; onStart: (task: any) => void | Promise<void>; onPostpone: (task: any) => void | Promise<void> }) {
+function TaskInboxCard({ task, userName, onStart, onPostpone, onConfirmMemory }: { task: any; userName: string; onStart: (task: any) => void | Promise<void>; onPostpone: (task: any) => void | Promise<void>; onConfirmMemory: (task: any, confirmed: boolean, correctedValue?: string) => void | Promise<void> }) {
   const [expanded, setExpanded] = useState(false);
   const taskType = task.task_type || task.type || "跟进";
+  const priority = task.priority || "normal";
   const dueAt = task.deadline || task.dueAt || task.due_at;
   const taskText = `${task.title || ""} ${task.content || ""} ${taskType}`;
   const tone = /风险|客诉|投诉|异常|退款|争议|签约|报价/.test(taskText)
@@ -325,21 +357,39 @@ function TaskInboxCard({ task, userName, onStart, onPostpone }: { task: any; use
   const customerInitial = String(task.title || "").match(/([\u4e00-\u9fff])(?:姐|女士|阿姨|先生|总)/)?.[1];
   const initial = customerInitial || String(taskType).trim().slice(0, 1) || "任";
 
-  const risk = tone === "danger";
+  const risk = tone === "danger" || priority === "urgent";
+  const isMemoryConfirmation = taskType === "memory_confirm";
   const detail = task.content || "这项经营动作需要在今天完成，避免影响后续服务闭环。";
+  const customerId = task.customer_id || task.customerId || task.customer?.id;
+  const customerName = task.customer?.name || task.customer_name || "未关联客户";
+  const sourceLabel = task.source_label || task.sourceLabel || "人工创建";
+  const sourceMeetingId = task.source_meeting_id || task.sourceMeetingId;
+  const knowledgeEvidence = Array.isArray(task.knowledge_evidence || task.knowledgeEvidence)
+    ? (task.knowledge_evidence || task.knowledgeEvidence)
+    : [];
+  const correctMemory = () => {
+    const corrected = window.prompt("输入修正后的客户记忆；留空则表示拒绝这条记忆：", "");
+    if (corrected === null) return;
+    void onConfirmMemory(task, false, corrected);
+  };
   return (
     <article className="ref-bento ref-work-card ref-card-lift">
       <div className="ref-work-card-head">
-        <div className="flex min-w-0 items-center gap-3"><div className="ref-work-avatar">{initial}</div><div className="min-w-0"><h3 className="truncate text-[16px] font-bold tracking-tight text-[#161d17]">{task.title || "待处理任务"}</h3><p className="mt-1 truncate text-[11px] text-[#6c7b6d]">{taskType}{dueAt ? ` · 截止 ${String(dueAt).slice(0, 10)}` : " · AI 已生成建议"}</p></div></div>
-        <span className={`ref-status ${risk ? "ref-status-red" : "ref-status-green"}`}>{risk ? "风险预警" : "AI 洞察"}</span>
+        <div className="flex min-w-0 items-center gap-3"><div className="ref-work-avatar">{initial}</div><div className="min-w-0"><h3 className="truncate text-[16px] font-bold tracking-tight text-[#161d17]">{task.title || "待处理任务"}</h3><p className="mt-1 truncate text-[11px] text-[#6c7b6d]">{customerName} · {sourceLabel}{dueAt ? ` · 截止 ${String(dueAt).slice(0, 10)}` : " · 未设截止"}</p></div></div>
+        <span className={`ref-status ${risk ? "ref-status-red" : "ref-status-green"}`}>{priority === "urgent" ? "紧急待办" : risk ? "风险预警" : priority === "high" ? "重要待办" : "AI 洞察"}</span>
       </div>
       <div className="mt-4"><p className="ref-eyebrow mb-1.5">核心结论</p><div className={`ref-work-insight ${risk ? "risk" : ""}`}><SparkIcon /><p>{risk ? "需要优先介入，确认事实与客户感受后再给出处理承诺。" : detail}</p></div></div>
       <button onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} className={`ref-work-action mt-3 ${risk ? "risk" : ""}`}>查看 AI 研判详情 <WorkChevron open={expanded} /></button>
-      {expanded && <div className="ref-task-detail"><b>执行提示</b><p>{risk ? "先确认客户事实与感受，再由负责人作出明确处理承诺。" : "完成沟通后，在 AI 教练中记录客户反馈，系统会继续生成下一步建议。"}</p></div>}
+      {expanded && <div className="ref-task-detail"><b>执行提示</b><p>{risk ? "先确认客户事实与感受，再由负责人作出明确处理承诺。" : "完成沟通后提交任务结果，系统会把反馈写入客户时间线并生成后续动作。"}</p><div className="mt-2 flex flex-wrap gap-2">{customerId && <Link href={`/customers/${customerId}`} className="text-[#006d37] underline underline-offset-2">查看客户档案</Link>}{sourceMeetingId && <Link href={`/meeting/${sourceMeetingId}`} className="text-[#006d37] underline underline-offset-2">查看来源会谈</Link>}</div>{knowledgeEvidence.length > 0 ? <div className="mt-2 border-t border-[#d8e6da] pt-2"><p className="text-[10px] font-bold text-[#4a5f4e]">本任务引用的门店知识</p>{knowledgeEvidence.map((item: any, index: number) => <Link key={`${item.document_id || item.title}-${index}`} href="/admin/knowledge" className="mt-1 block text-[10px] leading-relaxed text-[#006d37]"><b>{item.title || "门店知识"}</b>{item.excerpt ? `：${item.excerpt}` : ""}</Link>)}</div> : <p className="mt-2 text-[10px] text-[#738077]">未记录知识库引用；该任务依据为客户/会谈业务数据。</p>}</div>}
       <div className="ref-divider my-4" />
       <div className="grid grid-cols-2 gap-3 text-[11px]"><div><p className="text-[#6c7b6d]">负责人</p><p className="mt-1 font-semibold text-[#161d17]">{userName}（本人）</p></div><div><p className="text-[#6c7b6d]">建议时间</p><p className="mt-1 font-semibold text-[#161d17]">{dueAt ? String(dueAt).slice(5, 10) : "今日 14:00–16:00"}</p></div></div>
       <div className={`ref-work-script mt-4 ${risk ? "risk" : ""}`}>“{detail}”</div>
-      <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => void onStart(task)} className="ref-primary flex-1 px-3">开始执行</button><button onClick={() => void onPostpone(task)} className="ref-secondary px-3">稍后提醒</button></div>
+      {isMemoryConfirmation ? (
+        <div className="mt-4 rounded-xl border border-[#f1db9e] bg-[#fffdf4] p-3">
+          <p className="text-[11px] leading-relaxed text-[#725a13]">这条信息尚未进入正式客户记忆。请根据会谈原文确认、修正或拒绝，避免把猜测带入后续服务。</p>
+          <div className="mt-2 flex flex-wrap gap-2"><button onClick={() => void onConfirmMemory(task, true)} className="ref-primary flex-1 px-3">确认无误</button><button onClick={correctMemory} className="ref-secondary px-3">修正 / 拒绝</button></div>
+        </div>
+      ) : <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => void onStart(task)} className="ref-primary flex-1 px-3">开始执行</button><button onClick={() => void onPostpone(task)} className="ref-secondary px-3">稍后提醒</button></div>}
     </article>
   );
 }
@@ -351,12 +401,13 @@ function SourceCustomerWorkCard({ c, userName }: { c: PoolCustomer; userName: st
     : c.importInsight?.aiJudge || "";
   return (
     <Link href={`/customers/${c.id}`} className="ref-bento ref-work-card ref-card-lift block">
-      <div className="ref-work-card-head"><div className="flex min-w-0 items-center gap-3"><div className="ref-work-avatar">{c.name.slice(0, 1)}</div><div className="min-w-0"><h3 className="truncate text-[16px] font-bold text-[#161d17]">{c.name}</h3><p className="mt-1 truncate text-[11px] text-[#6c7b6d]">{c.stageLabel || "待跟进客户"} · {c.lastActive || "等待联系"}</p></div></div><span className={`ref-status ${risk ? "ref-status-red" : "ref-status-green"}`}>{risk ? "风险预警" : "AI 洞察"}</span></div>
+      <div className="ref-work-card-head"><div className="flex min-w-0 items-center gap-3"><div className="ref-work-avatar">{c.name.slice(0, 1)}</div><div className="min-w-0"><h3 className="truncate text-[16px] font-bold text-[#161d17]">{c.name}</h3><p className="mt-1 truncate text-[11px] text-[#6c7b6d]">{c.stageLabel || "待跟进客户"} · {c.lastActive || "等待联系"}</p></div></div><span className={`ref-status ${risk ? "ref-status-red" : "ref-status-green"}`}>{risk ? "风险预警" : "客户池候选"}</span></div>
       <div className="mt-4"><p className="ref-eyebrow mb-1.5">核心结论</p><div className={`ref-work-insight ${risk ? "risk" : ""}`}><SparkIcon /><p>{c.ai_suggestion || (risk ? "需要主动确认顾虑并提供修复方案，避免意向持续下降。" : c.concerns || importSummary || "适合以客户当前需求切入，先完成一次低门槛沟通。")}</p></div></div>
-      <span className={`ref-work-action mt-3 ${risk ? "risk" : ""}`}>查看 AI 研判详情 <WorkChevron /></span>
+      <span className={`ref-work-action mt-3 ${risk ? "risk" : ""}`}>查看客户并生成正式跟进 <WorkChevron /></span>
       <div className="ref-divider my-4" />
       <div className="grid grid-cols-2 gap-3 text-[11px]"><div><p className="text-[#6c7b6d]">负责人</p><p className="mt-1 font-semibold text-[#161d17]">{userName}（本人）</p></div><div><p className="text-[#6c7b6d]">建议时间</p><p className="mt-1 font-semibold text-[#161d17]">{c.nextFollowLabel || "今日 14:00–16:00"}</p></div></div>
-      <div className={`ref-work-script mt-4 ${risk ? "risk" : ""}`}>“{c.ai_suggestion || "您好，想跟您确认一下最近的安排。我们已结合您的情况准备了一个更合适的建议，方便时我为您说明。"}”</div>
+      <p className="mt-3 text-[10px] text-[#738077]">该项来自客户机会池，尚未创建正式待办，也未声明知识库引用。</p>
+      <div className={`ref-work-script mt-3 ${risk ? "risk" : ""}`}>“{c.ai_suggestion || "您好，想跟您确认一下最近的安排。我们已结合您的情况准备了一个更合适的建议，方便时我为您说明。"}”</div>
       <div className="mt-4 flex gap-2"><span className="ref-primary flex-1">查看客户并跟进</span><span className="ref-secondary px-3">详情</span></div>
     </Link>
   );

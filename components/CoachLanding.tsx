@@ -19,6 +19,8 @@ interface CustLite {
   assignedTo?: string | null;
 }
 
+const COACH_SELECTED_CUSTOMER_KEY = "store-ai:coach:selected-customer";
+
 function advisorLabel(value: string | null | undefined, fallback: string) {
   if (!value) return fallback;
   // 后端有时只返回员工 UUID；它不是客户侧应该看到的姓名。
@@ -39,7 +41,6 @@ export function CoachLanding({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<CustLite | null>(null);
-  const [feedback, setFeedback] = useState("");
   const [notice, setNotice] = useState("");
   const nav: NavItem[] = isAdmin ? MAIN_NAV : STAFF_NAV;
 
@@ -48,6 +49,9 @@ export function CoachLanding({
       if (r.ok && r.data) {
         const nextCustomers = r.data.map((c: any) => ({ id: c.id, name: c.name, phone: c.phone, stage: c.stage, concerns: c.concerns, lastVisitAt: c.last_visit_at || c.lastVisitAt, nextFollowAt: c.next_follow_at || c.nextFollowAt, assignedTo: c.assignedTo || c.assigned_to }));
         setCustomers(nextCustomers);
+        const selectedId = window.localStorage.getItem(COACH_SELECTED_CUSTOMER_KEY);
+        const restored = selectedId ? nextCustomers.find((item: CustLite) => item.id === selectedId) : null;
+        if (restored) setSelectedCustomer(restored);
       }
     });
   }, []);
@@ -64,20 +68,11 @@ export function CoachLanding({
   const go = (prompt: string) => router.push(chatHref(prompt));
   const goCustomer = () => router.push(chatHref());
   const copyScript = async () => {
-    const text = isCustomerMode
-      ? `“${selectedCustomer?.name}，我完全理解您对价格的考虑。咱们先一起看看怎样的方案更适合您。”`
-      : "请描述客户的顾虑、当前进展或你想达成的目标，我会给你可直接使用的话术和下一步动作。";
+    const text = directScript;
     try { await navigator.clipboard.writeText(text); setNotice("话术已复制，可以直接发送给客户。"); }
     catch { setNotice("当前浏览器无法自动复制，请长按话术复制。"); }
     window.setTimeout(() => setNotice(""), 2400);
   };
-  const recordFeedback = (value: string) => {
-    setFeedback(value);
-    if (selectedCustomer?.id) sessionStorage.setItem(`coach-feedback:${selectedCustomer.id}`, value);
-    setNotice(`已记录本次反馈：${value}`);
-    window.setTimeout(() => setNotice(""), 2400);
-  };
-
   const filteredCustomers = customers.filter((c) =>
     !customerSearch ||
     c.name?.includes(customerSearch) ||
@@ -85,14 +80,17 @@ export function CoachLanding({
   );
 
   const directScript = isCustomerMode
-    ? `“${selectedCustomer?.name}，我完全理解您对价格的考虑。咱们先一起看看怎样的方案更适合您。”`
+    ? `“${selectedCustomer?.name}，我想先把您最在意的${selectedCustomer?.concerns || "点"}了解清楚，再给您一个更适合的安排。”`
     : "“描述客户的顾虑、当前进展或你想达成的目标。我会给你可直接使用的话术和下一步动作。”";
-  const sampleQuestion = isCustomerMode
-    ? `${selectedCustomer?.name}对我们新推的服务很感兴趣，但是觉得价格比别家贵，有些犹豫。我该怎么说服她？`
-    : "客户觉得服务价格偏高、有些犹豫，我该如何继续沟通？";
-  const sampleAnswer = isCustomerMode
-    ? "针对价格异议，建议采用价值塑造法。先肯定她的顾虑，再确认她真正看重的效果和体验，最后给出匹配的到店方案。"
-    : "先确认客户最在意的是预算、效果还是决策时机，再用与她关切相匹配的价值说明推进下一步。不要直接承诺折扣或效果。";
+  const nextQuestions = isCustomerMode
+    ? [`“${selectedCustomer?.concerns || "这次需求"}”具体是指预算、效果、时间还是服务体验？`, "您希望这次沟通后先确认哪一步？"]
+    : ["目前最想解决的具体问题是什么？", "希望这次对话推动到哪一步？"];
+  const nextAction = isCustomerMode
+    ? selectedCustomer?.nextFollowAt ? `按 ${fmtTime(selectedCustomer.nextFollowAt)} 的既定跟进安排确认客户意向` : "先确认客户当前顾虑，再决定是否创建跟进"
+    : "先补充具体场景或选择一位客户，再生成可执行建议";
+  const contextSummary = isCustomerMode
+    ? "已带入客户档案、历史会谈复盘和已确认记忆；完整对话中会继续引用门店知识库。"
+    : "当前未关联客户：教练只会使用门店知识库和你在对话中提供的事实。";
 
   return (
     <div className={`ref-app ${classic ? "ref-chat-standard" : "ref-chat-workbench"}`}>
@@ -107,7 +105,7 @@ export function CoachLanding({
         <section className="ref-card ref-context">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2"><span className="rounded bg-[#e4f5e8] px-2 py-1 text-[11px] font-bold text-[#006d37]">{isCustomerMode ? "客户模式" : "通用模式"}</span><h1 className="truncate text-[18px] font-bold tracking-tight text-[#161d17]">{selectedCustomer?.name || "门店 AI 教练"}<span className="ml-1 text-[13px] font-normal text-[#506052]">{selectedCustomer?.phone ? `（尾号 ${selectedCustomer.phone.slice(-4)}）` : ""}</span></h1></div>
-            <div className="flex gap-2"><button onClick={() => setPickerOpen((o) => !o)} className="ref-secondary h-9 min-h-0 px-3 text-[11px] text-[#006d37]">{isCustomerMode ? "切换客户" : "选择客户"}</button>{isCustomerMode && <button onClick={() => { setSelectedCustomer(null); setPickerOpen(false); }} className="ref-secondary h-9 min-h-0 px-3 text-[11px]">取消关联</button>}</div>
+            <div className="flex gap-2"><button onClick={() => setPickerOpen((o) => !o)} className="ref-secondary h-9 min-h-0 px-3 text-[11px] text-[#006d37]">{isCustomerMode ? "切换客户" : "选择客户"}</button>{isCustomerMode && <button onClick={() => { setSelectedCustomer(null); window.localStorage.removeItem(COACH_SELECTED_CUSTOMER_KEY); setPickerOpen(false); }} className="ref-secondary h-9 min-h-0 px-3 text-[11px]">取消关联</button>}</div>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-[12px] text-[#3d4a3e]">{isCustomerMode ? <><span className="flex items-center gap-1.5"><CalendarIcon />{selectedCustomer?.nextFollowAt ? `下次跟进：${fmtTime(selectedCustomer.nextFollowAt)}` : "暂无预约记录"}</span>{!classic && <span className="flex items-center gap-1.5"><HistoryIcon />{selectedCustomer?.lastVisitAt ? `最近服务：${fmtTime(selectedCustomer.lastVisitAt)}` : "暂无服务记录"}</span>}<span className="flex items-center gap-1.5"><PersonIcon />专属顾问：{advisorLabel(selectedCustomer?.assignedTo, isAdmin ? "当前负责人" : "当前顾问")}</span></> : <><span className="flex items-center gap-1.5"><ChatIcon />可随时直接提问</span><span className="flex items-center gap-1.5"><PersonIcon />{isAdmin ? "老板" : "当前员工"}</span></>}</div>
           {pickerOpen && (
@@ -125,7 +123,7 @@ export function CoachLanding({
                   filteredCustomers.map((c) => (
                     <button
                       key={c.id}
-                      onClick={() => { setSelectedCustomer(c); setPickerOpen(false); }}
+                      onClick={() => { setSelectedCustomer(c); window.localStorage.setItem(COACH_SELECTED_CUSTOMER_KEY, c.id); setPickerOpen(false); }}
                       className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition hover:bg-[#effaf2]"
                     >
                       <span className="text-[13px] text-[#2b372e]">{c.name || "未命名客户"}</span>
@@ -143,13 +141,14 @@ export function CoachLanding({
           <p className="mt-3 text-[16px] italic leading-relaxed text-[#1e2a20]">{directScript}</p>
         </section>
 
-        <section className="ref-coach-grid"><div className="ref-card ref-coach-mini"><div className="mb-3 flex items-center gap-1.5 text-[15px] font-bold text-[#9b59b6]"><QuestionIcon />接下来要问</div><p className="text-[13px] leading-relaxed text-[#3d4a3e]">{isCustomerMode ? <>1. 之前做过类似项目吗？<br />2. 对维持时间有要求吗？</> : <>1. 目前最想解决什么问题？<br />2. 希望推进到哪一步？</>}</p></div><div className="ref-card ref-coach-mini"><div className="mb-3 flex items-center gap-1.5 text-[15px] font-bold text-[#006d37]"><ActionIcon />下一步动作</div><p className="text-[14px] font-bold text-[#161d17]">{isCustomerMode ? "邀约到店面测" : "明确目标后继续对话"}</p><p className="mt-1 text-[11px] text-[#6c7b6d]">负责人：{advisorLabel(selectedCustomer?.assignedTo, isAdmin ? "当前负责人" : "当前员工")}｜今日</p></div></section>
+        <section className="ref-coach-grid"><div className="ref-card ref-coach-mini"><div className="mb-3 flex items-center gap-1.5 text-[15px] font-bold text-[#9b59b6]"><QuestionIcon />接下来要问</div><p className="text-[13px] leading-relaxed text-[#3d4a3e]">1. {nextQuestions[0]}<br />2. {nextQuestions[1]}</p></div><div className="ref-card ref-coach-mini"><div className="mb-3 flex items-center gap-1.5 text-[15px] font-bold text-[#006d37]"><ActionIcon />下一步动作</div><p className="text-[14px] font-bold text-[#161d17]">{nextAction}</p><p className="mt-1 text-[11px] text-[#6c7b6d]">负责人：{advisorLabel(selectedCustomer?.assignedTo, isAdmin ? "当前负责人" : "当前员工")}</p></div></section>
 
         <section className={`ref-coach-risk ${selectedCustomer?.concerns ? "" : "ref-coach-reminder"}`}><WarningIcon /><div><b className="block text-[14px] text-[#c4392e]">{selectedCustomer?.concerns ? "风险提醒" : "沟通提醒"}</b><p className="mt-1 text-[13px] leading-relaxed text-[#b53a31]">{selectedCustomer?.concerns || "涉及价格、承诺、效果或投诉时，先确认事实与客户感受，再给出下一步方案。"}</p></div></section>
 
-        <section className="space-y-4 pt-4">
-          <div className="flex justify-end"><div className="ref-chat-user max-w-[84%] text-[16px]">{sampleQuestion}<span className="mt-2 block text-right text-[11px] text-white/60">上午 10:15</span></div></div>
-          <div className="ref-chat-ai-row"><span className="ref-chat-ai-mark"><CoachMark /></span><div className="min-w-0 flex-1"><div className="ref-chat-ai text-[16px]">{sampleAnswer}<div className="mt-4 border-t border-[#e9ecef] pt-3 text-right"><button onClick={goCustomer} className="ref-primary min-h-[40px] px-4">▷ 开始完整对话</button></div></div><div className="mt-3 space-y-2"><DeepDetail icon={<ChecklistIcon />} label="判断依据" content={isCustomerMode ? "基于当前客户的画像、服务记录和本次对话中的关切生成。" : "依据你提供的场景、目标和门店知识库生成建议。"} /><DeepDetail icon={<DocumentIcon />} label="参考资料（2）" content={isCustomerMode ? "客户档案与门店项目服务说明会在发送前一并核对。" : "可在完整对话中补充门店项目说明或具体案例。"} /><DeepDetail icon={<BulbIcon />} label="详细策略" content="先澄清目标和事实，再给出适配方案与可执行的下一步动作。" /></div><div className="ref-feedback">{["已接受", "已预约", "仍有顾虑", "信息有误", "需要升级"].map((item) => <button key={item} onClick={() => recordFeedback(item)} className={feedback === item ? "border-[#8cd5a4] bg-[#e8f5e9] text-[#006d37]" : ""}>{item}</button>)}</div></div></div>
+        <section className="ref-card ref-coach-script mt-4">
+          <div className="ref-coach-label"><CoachMark />本次教练上下文</div>
+          <p className="text-[13px] leading-relaxed text-[#3d4a3e]">{contextSummary}</p>
+          <div className="mt-4 border-t border-[#e9ecef] pt-3 text-right"><button onClick={goCustomer} className="ref-primary min-h-[40px] px-4">▷ 开始完整对话</button></div>
         </section>
 
       </main>

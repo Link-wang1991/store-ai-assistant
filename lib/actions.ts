@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getAuthContext, createAccount } from "./auth";
+import { getAuthContext } from "./auth";
+import { readServerToken } from "./server-cookie";
 import { db } from "./db";
 import { storage } from "./storage";
 import { isBackendMode, API_BASE_URL } from "./data-source";
@@ -17,7 +18,6 @@ import { parseFileToText, extFromFileName, SUPPORTED_EXTS } from "./knowledge/pa
 import { chunkText } from "./knowledge/chunk";
 import { buildAndSaveDailyReport } from "./ai/report";
 import { analyzeMeeting } from "./ai/meeting-analysis";
-import { embedTexts, toVectorLiteral } from "./ai/embedding";
 import { distillStoreExperience } from "./ai/store-memory";
 import type { AuthContext } from "./types";
 
@@ -44,6 +44,89 @@ async function requireAdmin(): Promise<AuthContext> {
   if (!ctx) throw new Error("未登录");
   if (!canEnterAdmin(ctx)) throw new Error("无权限");
   return ctx;
+}
+
+type BackendKnowledgeDocument = { id: string; title?: string; category?: string };
+
+/**
+ * 知识文件必须走 Spring 的正式知识库接口，而不是旧的通用 Proxy CRUD。
+ * 后者无法正确绑定 MySQL JSON 列，且与后端现有的事务、文件存储、向量化流程脱节。
+ */
+async function uploadKnowledgeToBackend(input: {
+  file: File;
+  fileName: string;
+  title: string;
+  category: string;
+  visibleRoles: string[];
+  tags?: string;
+  remark?: string | null;
+  status: string;
+}): Promise<BackendKnowledgeDocument> {
+  if (!isBackendMode()) throw new Error("当前环境未启用正式知识库服务");
+  const token = await readServerToken();
+  if (!token) throw new Error("登录已失效，请重新登录后再上传");
+
+  const body = new FormData();
+  body.append("file", input.file, input.fileName);
+  body.append("title", input.title);
+  body.append("category", input.category);
+  input.visibleRoles.forEach((role) => body.append("visibleRoles", role));
+  if (input.tags?.trim()) body.append("tags", input.tags.trim());
+  if (input.remark?.trim()) body.append("remark", input.remark.trim());
+  body.append("status", input.status);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/knowledge/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body,
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error("知识库服务连接失败，请确认软件后端已启动后重试");
+  }
+
+  const raw = await response.text();
+  let payload: any = null;
+  try { payload = raw ? JSON.parse(raw) : null; } catch {}
+  if (!response.ok || payload?.code !== 200 || !payload?.data?.id) {
+    throw new Error(payload?.message || `知识库保存失败（服务返回 ${response.status}）`);
+  }
+  return payload.data as BackendKnowledgeDocument;
+}
+
+async function createManualKnowledgeInBackend(input: {
+  title: string;
+  category: string;
+  content: string;
+  visibleRoles: string[];
+  tags?: string;
+  remark?: string | null;
+  status: string;
+}): Promise<BackendKnowledgeDocument> {
+  if (!isBackendMode()) throw new Error("当前环境未启用正式知识库服务");
+  const token = await readServerToken();
+  if (!token) throw new Error("登录已失效，请重新登录后再创建");
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/knowledge/manual`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(input),
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error("知识库服务连接失败，请确认软件后端已启动后重试");
+  }
+  const raw = await response.text();
+  let payload: any = null;
+  try { payload = raw ? JSON.parse(raw) : null; } catch {}
+  if (!response.ok || payload?.code !== 200 || !payload?.data?.id) {
+    throw new Error(payload?.message || `知识库保存失败（服务返回 ${response.status}）`);
+  }
+  return payload.data as BackendKnowledgeDocument;
 }
 
 // ---------------- 知识库 ----------------
@@ -87,44 +170,17 @@ export async function uploadKnowledge(formData: FormData): Promise<ActionResult>
   const chunks = chunkText(text, title);
   if (chunks.length === 0) return { ok: false, message: "未能从文件中提取到文本内容" };
 
-  // 保存原始文件（storage 适配层，默认 none 时返回 null）
-  const saved = await storage.saveOriginal({
-    storeId: ctx.store.id,
-    fileName: file.name,
-    buffer: buf,
-    contentType: file.type,
-  });
-
   try {
-    const doc = await db.knowledge.createDoc({
-      store_id: ctx.store.id,
+    await uploadKnowledgeToBackend({
+      file,
+      fileName: fixFilename(file.name),
       title,
       category,
-      file_url: saved.url,
-      file_type: ext,
-      visible_roles: visibleRoles,
-      tags,
-      status,
-      uploaded_by: ctx.employee.id,
+      visibleRoles,
+      tags: tags.join(","),
       remark,
+      status,
     });
-
-    // 同步生成语义向量（失败留空，由 backfill 脚本补；不阻断上传）
-    const embeds = await embedTexts(chunks.map((c) => `${c.title}\n${c.content}`));
-    await db.knowledge.createChunks(
-      chunks.map((c, i) => ({
-        store_id: ctx.store.id,
-        document_id: doc.id,
-        title: c.title,
-        content: c.content,
-        category,
-        visible_roles: visibleRoles,
-        tags,
-        status,
-        source: file.name,
-        embedding: embeds[i] ? toVectorLiteral(embeds[i] as number[]) : null,
-      }))
-    );
 
     revalidatePath("/admin/knowledge");
     return { ok: true, message: `上传成功，生成 ${chunks.length} 个知识片段` };
@@ -182,7 +238,6 @@ export async function batchUploadKnowledge(
       chunks: 0,
       ok: false,
     };
-    let createdDocId: string | null = null;
     try {
       if (file.size > 25 * 1024 * 1024) throw new Error("文件过大（超过 25MB）");
       const ext = extFromFileName(file.name);
@@ -206,40 +261,14 @@ export async function batchUploadKnowledge(
       }
       if (isNew && !baseCats.includes(category)) baseCats.push(category);
 
-      const saved = await storage.saveOriginal({
-        storeId: ctx.store.id,
+      const doc = await uploadKnowledgeToBackend({
+        file,
         fileName: realName,
-        buffer: buf,
-        contentType: file.type,
-      });
-      const doc = await db.knowledge.createDoc({
-        store_id: ctx.store.id,
         title: titleBase,
         category,
-        file_url: saved.url,
-        file_type: ext,
-        visible_roles: visibleRoles,
-        tags: [],
+        visibleRoles,
         status,
-        uploaded_by: ctx.employee.id,
-        remark: null,
       });
-      createdDocId = doc.id;
-      const embeds = await embedTexts(chunks.map((c) => `${c.title}\n${c.content}`));
-      await db.knowledge.createChunks(
-        chunks.map((c, i) => ({
-          store_id: ctx.store.id,
-          document_id: doc.id,
-          title: c.title,
-          content: c.content,
-          category,
-          visible_roles: visibleRoles,
-          tags: [],
-          status,
-          source: realName,
-          embedding: embeds[i] ? toVectorLiteral(embeds[i] as number[]) : null,
-        }))
-      );
       item.docId = doc.id;
       item.category = category;
       item.isNew = isNew && !kbCats.includes(category);
@@ -247,12 +276,6 @@ export async function batchUploadKnowledge(
       item.ok = true;
     } catch (e: any) {
       item.message = e?.message || "处理失败";
-      // 回滚：文档已建但片段/向量化失败时，删掉空文档，不留「0 片段」垃圾
-      if (createdDocId) {
-        try {
-          await db.knowledge.deleteDoc(createdDocId, ctx.store.id);
-        } catch {}
-      }
     }
     results.push(item);
   }
@@ -292,33 +315,15 @@ export async function createManualKnowledge(formData: FormData): Promise<ActionR
   if (chunks.length === 0) return { ok: false, message: "内容为空" };
 
   try {
-    const doc = await db.knowledge.createDoc({
-      store_id: ctx.store.id,
+    await createManualKnowledgeInBackend({
       title,
       category,
-      file_url: null,
-      file_type: "text",
-      visible_roles: visibleRoles,
-      tags,
-      status,
-      uploaded_by: ctx.employee.id,
+      content,
+      visibleRoles,
+      tags: tags.join(","),
       remark,
+      status,
     });
-    const embeds = await embedTexts(chunks.map((c) => `${c.title}\n${c.content}`));
-    await db.knowledge.createChunks(
-      chunks.map((c, i) => ({
-        store_id: ctx.store.id,
-        document_id: doc.id,
-        title: c.title,
-        content: c.content,
-        category,
-        visible_roles: visibleRoles,
-        tags,
-        status,
-        source: "手动输入",
-        embedding: embeds[i] ? toVectorLiteral(embeds[i] as number[]) : null,
-      }))
-    );
     revalidatePath("/admin/knowledge");
     return { ok: true, message: `已创建，生成 ${chunks.length} 个知识片段` };
   } catch (e: any) {
@@ -371,24 +376,13 @@ export async function createEmployee(formData: FormData): Promise<ActionResult> 
   const password = (formData.get("password") as string) || "";
   const phone = (formData.get("phone") as string) || null;
   const role = (formData.get("role") as string) || "consultant";
-  const position = (formData.get("position") as string) || null;
 
   if (!name) return { ok: false, message: "请填写姓名" };
   if (!email) return { ok: false, message: "请填写登录邮箱" };
   if (password.length < 6) return { ok: false, message: "密码至少 6 位" };
 
   try {
-    const { authUserId } = await createAccount(email, password);
-    const u = await db.users.create({ auth_user_id: authUserId, name, email, phone });
-    await db.employees.create({
-      store_id: ctx.store.id,
-      user_id: u.id,
-      name,
-      phone,
-      role,
-      position,
-      status: "active",
-    });
+    await db.employeeAccounts.create({ name, email, password, phone, role });
     revalidatePath("/admin/employees");
     return { ok: true, message: "员工已添加" };
   } catch (e: any) {
@@ -1860,6 +1854,8 @@ export async function saveConfigCategory(
     return { ok: false, message: e.message };
   }
   revalidatePath("/settings/config");
+  revalidatePath("/admin/knowledge");
+  revalidatePath("/admin/knowledge/upload");
   return { ok: true, message: "已保存" };
 }
 
