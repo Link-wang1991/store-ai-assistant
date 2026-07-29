@@ -66,19 +66,30 @@ async function backendApi<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
+  // 防止后端未就绪时 fetch 永久挂起导致页面一直转圈
+  const controller = new AbortController();
+  const timeoutMs = 10000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       headers,
       body: options.body ? JSON.stringify(options.body) : options.body,
+      signal: controller.signal,
     });
+    clearTimeout(timer);
     const json = await res.json();
     if (json.code === 200) {
       return { ok: true, data: json.data as T };
     }
-    return { ok: false, error: json.message || "请求失败" };
+    return { ok: false, error: json.message || `请求失败(${res.status})` };
   } catch (e: any) {
-    return { ok: false, error: e.message || "网络错误" };
+    clearTimeout(timer);
+    if (e?.name === "AbortError") {
+      return { ok: false, error: "请求超时，请确认后端服务(8080)已启动" };
+    }
+    return { ok: false, error: e?.message || "网络错误" };
   }
 }
 

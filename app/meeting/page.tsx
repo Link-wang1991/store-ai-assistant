@@ -47,10 +47,12 @@ export default function MeetingPage() {
     setEmpName(ename);
 
     const now = Date.now();
+    const fallbackTimer = setTimeout(() => setLoading(false), 15000);
     Promise.allSettled([
       customerApi.list(),
       meetingApi.list(),
     ]).then(([cr, mr]) => {
+      clearTimeout(fallbackTimer);
       if (cr.status === "fulfilled" && cr.value.ok) {
         const all = cr.value.data || [];
         setMyCustomers(all.filter((c: any) => c.assignedTo === eid).map((c: any) => ({ id: c.id, name: c.name })));
