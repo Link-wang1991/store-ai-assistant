@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { RISK_LEVEL_COLORS, type RiskLevel } from "@/lib/constants";
 import { chatApi, type AiActionProposal } from "@/lib/api-client";
@@ -14,7 +15,7 @@ interface Msg {
   riskLevel?: string | null;
   answerType?: string | null;
   feedbackType?: string | null;
-  retrieved?: { chunkId?: string; documentTitle?: string; snippet: string }[];
+  retrieved?: { chunkId?: string; documentId?: string; documentTitle?: string; snippet: string }[];
   methodology?: { id?: string; scenarioKey?: string; title: string; module?: string; source?: string }[];
   actionProposal?: AiActionProposal | null;
 }
@@ -98,7 +99,7 @@ function ClassicAiBubble({ message, onFeedback, canCreateAction, onCreateAction,
             {analysisOpen && <div className="mt-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs leading-relaxed text-slate-600"><ClassicRichText text={analysis} /></div>}
           </div>
         )}
-        {message.retrieved && message.retrieved.length > 0 && <div className="mt-1.5 ml-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[10px] leading-relaxed text-slate-500"><div className="font-medium text-slate-700">参考门店资料</div>{message.retrieved.map((item, index) => <div key={item.chunkId || index}>{index + 1}. {item.documentTitle ? `《${item.documentTitle}》：` : ""}{item.snippet}</div>)}</div>}
+        {message.retrieved && message.retrieved.length > 0 && <div className="mt-1.5 ml-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[10px] leading-relaxed text-slate-500"><div className="font-medium text-slate-700">本次引用的门店资料快照</div><p className="mt-0.5 text-slate-400">以下内容是生成本条回答时的命中依据。</p>{message.retrieved.map((item, index) => <div key={item.chunkId || index} className="mt-1 rounded-md bg-slate-50 px-2 py-1.5"><div className="flex justify-between gap-2"><span>{index + 1}. {item.documentTitle ? `《${item.documentTitle}》` : "门店资料"}</span>{item.documentId && <Link href={`/knowledge?source=${encodeURIComponent(item.documentId)}`} className="shrink-0 text-[var(--green-dark)] underline">查看</Link>}</div><div className="mt-0.5">{item.snippet}</div></div>)}</div>}
         {message.methodology && message.methodology.length > 0 && <div className="mt-1.5 ml-1 rounded-lg border border-[#b6e0c1] bg-[#f5faf5] px-2.5 py-2 text-[10px] leading-relaxed text-slate-600"><div className="font-medium text-[var(--green-dark)]">系统销售方法论</div>{message.methodology.map((item, index) => <div key={item.id || item.scenarioKey || index}>{index + 1}. 《{item.title}》{item.module ? ` · ${item.module}` : ""}</div>)}<div className="mt-1 text-slate-400">用于沟通策略，门店规则优先。</div></div>}
         {(message.answerType || (message.riskLevel && message.riskLevel !== "L1")) && (
           <div className="mt-1 flex gap-1.5 pl-1">
@@ -111,7 +112,7 @@ function ClassicAiBubble({ message, onFeedback, canCreateAction, onCreateAction,
           <button onClick={() => markFeedback(false)} disabled={Boolean(feedback)} className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] ${feedback === "notHelpful" ? "bg-red-100 text-red-700" : "bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-600"}`}>👎 {feedback === "notHelpful" ? "没用" : ""}</button>
         </div>
         {canCreateAction && (
-          proposal ? <div className="mt-1.5 pl-1 text-[10px] text-[var(--green-dark)]">已保存为待确认待办 · <button onClick={onOpenActionWorkbench} className="font-semibold underline">去工作台调整并确认</button></div>
+          proposal ? proposal.status === "applied" ? <div className="mt-1.5 pl-1 text-[10px] text-[var(--green-dark)]"><span className="font-medium">{proposal.appliedTaskStatus === "done" ? "已闭环" : proposal.appliedTaskStatus === "doing" ? "待办执行中" : "已创建正式待办"}</span>{proposal.appliedTaskFeedback ? `：${proposal.appliedTaskFeedback}` : ""} · <Link href="/tasks" className="font-semibold underline">查看结果</Link></div> : proposal.status === "rejected" ? <div className="mt-1.5 pl-1 text-[10px] text-slate-400">本条建议未创建正式待办。</div> : <div className="mt-1.5 pl-1 text-[10px] text-[var(--green-dark)]">已保存为待确认待办 · <button onClick={onOpenActionWorkbench} className="font-semibold underline">去工作台调整并确认</button></div>
             : <button onClick={() => void createAction()} disabled={proposalBusy} className="mt-1.5 ml-1 rounded-full border border-brand/30 bg-white px-2.5 py-1 text-[10px] font-medium text-brand-dark disabled:opacity-50">{proposalBusy ? "正在保存…" : "将建议转为待办"}</button>
         )}
       </div>

@@ -64,6 +64,16 @@ function isToday(value: unknown): boolean {
     && date.getDate() === now.getDate();
 }
 
+/** 首页“今日待跟进”只统计今天截止或已逾期的未完成正式任务，绝不回退为全部待办。 */
+function isDueByEndOfToday(value: unknown): boolean {
+  if (!value) return false;
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return false;
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  return date.getTime() <= end.getTime();
+}
+
 export default function HomePage({ navItems }: { navItems: NavItem[] }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -109,11 +119,12 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
     const actionable = custs.filter((c) => c.pool !== "regular");
     const priority = actionable.length;
     const followup = tasks.filter((t) => (t.status === "todo" || t.status === "doing" || t.status === "overdue")
-      && isToday(t.due_at || t.dueAt || t.deadline)).length;
+      && isDueByEndOfToday(t.due_at || t.dueAt || t.deadline)).length;
     const todayVisit = custs.filter((c) => c.pool === "today").length;
     return {
       priority: priority || 0,
-      followup: followup || tasks.filter((t) => t.status === "todo").length || 0,
+      // “今日待跟进”只代表今天到期或已逾期的正式待办；不能在数字为 0 时偷换成全部 todo。
+      followup,
       todayVisit: todayVisit || 0,
       review: reviewCount,
     };
@@ -211,7 +222,7 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
             value={`${stats.priority} 位`}
             sub="需要优先处理"
             tone="green"
-            href="/customers"
+            href="/customers?mode=priority"
           />
           <StatCard
             icon={
@@ -224,7 +235,7 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
             value={`${stats.followup} 个`}
             sub="动作待完成"
             tone="orange"
-            href="/tasks"
+            href="/tasks?mode=today"
           />
           <StatCard
             icon={
@@ -364,8 +375,15 @@ function TaskInboxCard({ task, userName, onStart, onPostpone, onConfirmMemory }:
   const customerName = task.customer?.name || task.customer_name || "未关联客户";
   const sourceLabel = task.source_label || task.sourceLabel || "人工创建";
   const sourceMeetingId = task.source_meeting_id || task.sourceMeetingId;
+  const sourceChatSessionId = task.source_chat_session_id || task.sourceChatSessionId;
+  const sourceSummary = task.source_summary || task.sourceSummary;
+  const sourceStatus = task.source_status || task.sourceStatus;
+  const sourceChain = Array.isArray(task.source_chain || task.sourceChain) ? (task.source_chain || task.sourceChain).map(String) : [];
   const knowledgeEvidence = Array.isArray(task.knowledge_evidence || task.knowledgeEvidence)
     ? (task.knowledge_evidence || task.knowledgeEvidence)
+    : [];
+  const methodologyEvidence = Array.isArray(task.methodology_evidence || task.methodologyEvidence)
+    ? (task.methodology_evidence || task.methodologyEvidence)
     : [];
   const correctMemory = () => {
     const corrected = window.prompt("输入修正后的客户记忆；留空则表示拒绝这条记忆：", "");
@@ -380,7 +398,16 @@ function TaskInboxCard({ task, userName, onStart, onPostpone, onConfirmMemory }:
       </div>
       <div className="mt-4"><p className="ref-eyebrow mb-1.5">核心结论</p><div className={`ref-work-insight ${risk ? "risk" : ""}`}><SparkIcon /><p>{risk ? "需要优先介入，确认事实与客户感受后再给出处理承诺。" : detail}</p></div></div>
       <button onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} className={`ref-work-action mt-3 ${risk ? "risk" : ""}`}>查看 AI 研判详情 <WorkChevron open={expanded} /></button>
-      {expanded && <div className="ref-task-detail"><b>执行提示</b><p>{risk ? "先确认客户事实与感受，再由负责人作出明确处理承诺。" : "完成沟通后提交任务结果，系统会把反馈写入客户时间线并生成后续动作。"}</p><div className="mt-2 flex flex-wrap gap-2">{customerId && <Link href={`/customers/${customerId}`} className="text-[#006d37] underline underline-offset-2">查看客户档案</Link>}{sourceMeetingId && <Link href={`/meeting/${sourceMeetingId}`} className="text-[#006d37] underline underline-offset-2">查看来源会谈</Link>}</div>{knowledgeEvidence.length > 0 ? <div className="mt-2 border-t border-[#d8e6da] pt-2"><p className="text-[10px] font-bold text-[#4a5f4e]">本任务引用的门店知识</p>{knowledgeEvidence.map((item: any, index: number) => <Link key={`${item.document_id || item.title}-${index}`} href="/admin/knowledge" className="mt-1 block text-[10px] leading-relaxed text-[#006d37]"><b>{item.title || "门店知识"}</b>{item.excerpt ? `：${item.excerpt}` : ""}</Link>)}</div> : <p className="mt-2 text-[10px] text-[#738077]">未记录知识库引用；该任务依据为客户/会谈业务数据。</p>}</div>}
+      {expanded && <div className="ref-task-detail"><b>执行提示</b><p>{risk ? "先确认客户事实与感受，再由负责人作出明确处理承诺。" : "完成沟通后提交任务结果，系统会把反馈写入客户时间线并生成后续动作。"}</p>
+        <div className="mt-2 rounded-lg border border-[#d8e6da] bg-white/70 p-2 text-[10px] leading-relaxed text-[#4a5f4e]">
+          <p className="font-bold">来源追溯</p>
+          <p className="mt-1">{sourceChain.length > 0 ? sourceChain.join(" → ") : sourceLabel}{sourceStatus ? ` · ${sourceStatus}` : ""}</p>
+          {sourceSummary && <p className="mt-1 text-[#66766a]">原始判断：{sourceSummary}</p>}
+          <div className="mt-2 flex flex-wrap gap-2">{customerId && <Link href={`/customers/${customerId}`} className="text-[#006d37] underline underline-offset-2">查看客户档案</Link>}{sourceMeetingId && <Link href={`/meeting/${sourceMeetingId}`} className="text-[#006d37] underline underline-offset-2">查看来源会谈</Link>}{sourceChatSessionId && <Link href={`/chat?sessionId=${encodeURIComponent(sourceChatSessionId)}${customerId ? `&customerId=${encodeURIComponent(customerId)}` : ""}`} className="text-[#006d37] underline underline-offset-2">查看来源 AI 对话</Link>}</div>
+        </div>
+        {knowledgeEvidence.length > 0 ? <div className="mt-2 border-t border-[#d8e6da] pt-2"><p className="text-[10px] font-bold text-[#4a5f4e]">当时引用的门店资料</p>{knowledgeEvidence.map((item: any, index: number) => <Link key={`${item.document_id || item.documentId || item.title}-${index}`} href={item.document_id || item.documentId ? `/knowledge?source=${encodeURIComponent(item.document_id || item.documentId)}` : "/knowledge"} className="mt-1 block text-[10px] leading-relaxed text-[#006d37]"><b>{item.title || "门店知识"}</b>{item.excerpt ? `：${item.excerpt}` : ""}</Link>)}</div> : <p className="mt-2 text-[10px] text-[#738077]">未记录门店资料引用；该任务依据为客户、会谈或人工业务数据。</p>}
+        {methodologyEvidence.length > 0 && <div className="mt-2 border-t border-[#d8e6da] pt-2"><p className="text-[10px] font-bold text-[#4a5f4e]">系统销售方法论</p>{methodologyEvidence.map((item: any, index: number) => <p key={`${item.id || item.title}-${index}`} className="mt-1 text-[10px] leading-relaxed text-[#66766a]"><b>{item.title || "销售方法论"}</b>{item.module ? ` · ${item.module}` : ""}{item.excerpt ? `：${item.excerpt}` : ""}</p>)}<p className="mt-1 text-[10px] text-[#738077]">仅用于沟通和决策策略，不替代门店价格、服务与合规规则。</p></div>}
+      </div>}
       <div className="ref-divider my-4" />
       <div className="grid grid-cols-2 gap-3 text-[11px]"><div><p className="text-[#6c7b6d]">负责人</p><p className="mt-1 font-semibold text-[#161d17]">{userName}（本人）</p></div><div><p className="text-[#6c7b6d]">建议时间</p><p className="mt-1 font-semibold text-[#161d17]">{dueAt ? String(dueAt).slice(5, 10) : "今日 14:00–16:00"}</p></div></div>
       <div className={`ref-work-script mt-4 ${risk ? "risk" : ""}`}>“{detail}”</div>

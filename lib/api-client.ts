@@ -266,7 +266,7 @@ export type ChatMessageItem = {
   riskLevel?: string;
   answerType?: string;
   feedbackType?: string | null;
-  retrieved?: { chunkId?: string; documentTitle?: string; snippet: string }[];
+  retrieved?: { chunkId?: string; documentId?: string; documentTitle?: string; snippet: string }[];
   methodology?: { id?: string; scenarioKey?: string; title: string; module?: string; source?: string }[];
   actionProposal?: AiActionProposal | null;
 };
@@ -282,6 +282,10 @@ export type AiActionProposal = {
   dueAt?: string | null;
   status: "pending" | "applied" | "rejected" | string;
   appliedTaskId?: string | null;
+  /** 正式待办的实时闭环状态，供原 AI 建议回看执行结果。 */
+  appliedTaskStatus?: string | null;
+  appliedTaskFeedback?: string | null;
+  appliedTaskUpdatedAt?: string | null;
 };
 
 export type ActionProposalAssignee = { id: string; name: string; role: string };
@@ -298,7 +302,7 @@ export const chatApi = {
     return backendApi<{
       sessionId: string; answer: string; answerType: string;
       riskLevel: string; messageId: string;
-      retrieved: { chunkId?: string; documentTitle?: string; snippet: string }[];
+      retrieved: { chunkId?: string; documentId?: string; documentTitle?: string; snippet: string }[];
       methodology: { id?: string; scenarioKey?: string; title: string; module?: string; source?: string }[];
     }>("/api/chat", {
       method: "POST",

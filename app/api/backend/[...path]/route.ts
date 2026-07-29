@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { BACKEND_API_BASE_URL } from "@/lib/data-source";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 type RouteContext = { params: Promise<{ path: string[] }> };
 
@@ -28,18 +29,21 @@ async function proxyToBackend(request: NextRequest, context: RouteContext) {
 
   const hasBody = !["GET", "HEAD"].includes(request.method);
   try {
+    // 音频可接近 60MB。必须流式转发，不能先 request.arrayBuffer() 再请求 Java
+    // 后端，否则手机上传会在 Next 进程中多复制一份文件，极易造成超时或内存中断。
     const upstream = await fetch(target, {
       method: request.method,
       headers,
-      body: hasBody ? await request.arrayBuffer() : undefined,
+      body: hasBody ? request.body : undefined,
+      ...(hasBody ? { duplex: "half" as const } : {}),
       cache: "no-store",
-    });
+    } as RequestInit & { duplex?: "half" });
     const responseHeaders = new Headers();
     for (const key of ["content-type", "content-disposition", "cache-control"]) {
       const value = upstream.headers.get(key);
       if (value) responseHeaders.set(key, value);
     }
-    return new NextResponse(await upstream.arrayBuffer(), {
+    return new NextResponse(upstream.body, {
       status: upstream.status,
       headers: responseHeaders,
     });

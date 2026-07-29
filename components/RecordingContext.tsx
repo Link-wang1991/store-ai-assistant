@@ -125,7 +125,10 @@ function recordingError(error: unknown) {
   return error instanceof Error && error.message ? error.message : "录音启动失败，请稍后重试。";
 }
 
-async function markUploadFailed(meetingId: string, reason: string) {
+/** 仅用于录音根本未启动（例如麦克风被拒绝）。
+ * 上传阶段的网络异常不能把会谈直接标失败：服务端可能已经收到音频，只是回包在路上丢失。
+ */
+async function markRecordingFailed(meetingId: string, reason: string) {
   const token = getToken();
   await fetch(`${API_BASE_URL}/api/meetings/${meetingId}`, {
     method: "PATCH",
@@ -140,13 +143,28 @@ async function uploadPendingAudio(upload: PendingAudioUpload) {
   form.append("file", upload.blob, `meeting-${upload.meetingId}.${ext}`);
   form.append("duration", String(upload.duration));
   const token = getToken();
-  const response = await fetch(`${API_BASE_URL}/api/meetings/${upload.meetingId}/audio`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: form,
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.code !== 200) throw new Error(payload.message || "录音上传失败，请检查网络后重试。");
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 120_000);
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/meetings/${upload.meetingId}/audio`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.code !== 200) throw new Error(payload.message || "录音上传失败，请检查网络后重试。");
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("上传超过 2 分钟未完成。录音已保留在本设备，可在详情页重新上传。");
+    }
+    if (error instanceof TypeError) {
+      throw new Error("上传连接中断。录音已保留在本设备，请恢复网络后在详情页重新上传。");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 async function retryPendingAudioUpload(meetingId: string): Promise<{ ok: boolean; error?: string }> {
@@ -158,7 +176,6 @@ async function retryPendingAudioUpload(meetingId: string): Promise<{ ok: boolean
     return { ok: true };
   } catch (error) {
     const reason = error instanceof Error ? error.message : "录音上传失败，请稍后重试。";
-    await markUploadFailed(meetingId, reason);
     return { ok: false, error: reason };
   }
 }
@@ -187,7 +204,6 @@ function makeOnStop(mid: string, router: any) {
       await clearPendingAudio(mid);
     } catch (error) {
       uploadError = error instanceof Error ? error.message : "录音上传失败，请稍后重试。";
-      await markUploadFailed(mid, uploadError);
     } finally {
       cleanupStore();
       router.push(`/meeting/${mid}${uploadError ? `?uploadError=${encodeURIComponent(uploadError)}` : ""}`);
@@ -223,7 +239,7 @@ async function doStartRecording(opts: { isNewCustomer: boolean; customerId: stri
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
       });
     } catch (error) {
-      await markUploadFailed(mid, recordingError(error));
+      await markRecordingFailed(mid, recordingError(error));
       throw new Error(recordingError(error));
     }
     streamRef = stream;

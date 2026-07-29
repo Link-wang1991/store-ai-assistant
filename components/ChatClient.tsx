@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { RISK_LEVEL_COLORS, type RiskLevel } from "@/lib/constants";
 import { chatApi, type AiActionProposal, type ActionProposalAssignee } from "@/lib/api-client";
@@ -21,7 +22,7 @@ interface Msg {
   riskLevel?: string | null;
   answerType?: string | null;
   feedbackType?: string | null;
-  retrieved?: { chunkId?: string; documentTitle?: string; snippet: string }[];
+  retrieved?: { chunkId?: string; documentId?: string; documentTitle?: string; snippet: string }[];
   methodology?: { id?: string; scenarioKey?: string; title: string; module?: string; source?: string }[];
   actionProposal?: AiActionProposal | null;
 }
@@ -198,7 +199,7 @@ function AiBubble({
         )}
 
         {m.retrieved && m.retrieved.length > 0 && (
-          <details className="ref-chat-detail mt-2"><summary><span className="flex items-center gap-1.5"><InsightIcon />参考门店资料（{m.retrieved.length}）</span><ChevronIcon open={false} /></summary><div className="ref-chat-detail-content">{m.retrieved.map((item, index) => <span key={`${item.chunkId || index}`} className="mb-1 block">{index + 1}. {item.documentTitle ? `《${item.documentTitle}》：` : ""}{item.snippet}</span>)}</div></details>
+          <details className="ref-chat-detail mt-2"><summary><span className="flex items-center gap-1.5"><InsightIcon />本次引用的门店资料快照（{m.retrieved.length}）</span><ChevronIcon open={false} /></summary><div className="ref-chat-detail-content"><p className="mb-2 text-[11px] text-[var(--faint)]">以下为回答生成时实际命中的片段；资料更新后，历史回答仍以这里的快照为准。</p>{m.retrieved.map((item, index) => <div key={`${item.chunkId || index}`} className="mb-2 rounded-lg border border-[var(--line)] bg-white/70 px-2.5 py-2"><div className="flex items-center justify-between gap-2"><span className="font-medium text-[var(--ink)]">{index + 1}. {item.documentTitle ? `《${item.documentTitle}》` : "门店资料"}</span>{item.documentId && <Link href={`/knowledge?source=${encodeURIComponent(item.documentId)}`} className="shrink-0 text-[11px] font-medium text-[var(--green-dark)] underline underline-offset-2">查看原资料</Link>}</div><p className="mt-1 whitespace-pre-wrap">{item.snippet}</p></div>)}</div></details>
         )}
 
         {m.methodology && m.methodology.length > 0 && (
@@ -234,7 +235,13 @@ function AiBubble({
                   <button onClick={() => void resolveAction("apply")} disabled={proposalBusy} className="rounded-full bg-[var(--green)] px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-50">{proposalBusy ? "处理中…" : "确认创建待办"}</button>
                 </div>
               </>
-            ) : <div className="mt-2 text-[11px] text-[var(--green-dark)]">{proposal.status === "applied" ? "已创建跟进待办" : "已选择暂不创建"}</div>}
+            ) : proposal.status === "applied" ? (
+              <div className="mt-2 rounded-lg border border-[#b6e0c1] bg-white/80 p-2 text-[11px] text-[var(--green-dark)]">
+                <p className="font-medium">{proposal.appliedTaskStatus === "done" ? "已闭环：正式待办已完成" : proposal.appliedTaskStatus === "doing" ? "执行中：正式待办正在处理" : "已创建：等待负责人执行"}</p>
+                {proposal.appliedTaskFeedback && <p className="mt-1 leading-relaxed">执行反馈：{proposal.appliedTaskFeedback}</p>}
+                {proposal.appliedTaskId && <Link href="/tasks" className="mt-1 inline-block underline underline-offset-2">查看正式待办与结果</Link>}
+              </div>
+            ) : <div className="mt-2 text-[11px] text-[var(--faint)]">已选择暂不创建，未写入正式任务。</div>}
           </div>
         ) : canCreateAction && onCreateAction && (
           <button onClick={() => void createAction()} disabled={proposalBusy} className="mt-2 rounded-full border border-[var(--green-light)] bg-white px-3 py-1.5 text-[11px] font-medium text-[var(--green-dark)] disabled:opacity-50">{proposalBusy ? "正在生成待办…" : "将建议转为待办"}</button>

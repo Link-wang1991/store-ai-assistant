@@ -51,7 +51,9 @@ function CustomersPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedPool = searchParams.get("pool");
+  const requestedMode = searchParams.get("mode");
   const initialPool = TABS.some((tab) => tab.key === requestedPool) ? requestedPool! : "all";
+  const priorityMode = requestedMode === "priority";
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState("");
   const [customers, setCustomers] = useState<any[]>([]);
@@ -84,7 +86,7 @@ function CustomersPageContent() {
   const customersWithPool = useMemo(() => customers.map((customer) => ({ ...customer, _pool: effectivePool(customer) })), [customers]);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const filtered = customersWithPool.filter((customer) => {
-    const inPool = activeTab === "all" || customer._pool === activeTab;
+    const inPool = priorityMode ? customer._pool !== "regular" : activeTab === "all" || customer._pool === activeTab;
     const text = [customer.name, customer.phone, customer.ai_suggestion, customer.aiSuggestion, customer.concerns, STAGE_LABEL[customer.stage] || customer.stage].filter(Boolean).join(" ").toLocaleLowerCase();
     return inPool && (!normalizedQuery || text.includes(normalizedQuery));
   });
@@ -103,7 +105,7 @@ function CustomersPageContent() {
         <span className="ref-management-pill">客户机会池</span>
       </header>
       <main className="ref-main">
-        <section className="ref-customer-intro"><h1 className="ref-page-title">今天该跟谁</h1><p>与首页使用同一分池规则；“今日到店”包含今天已到店或已预约的客户。</p></section>
+        <section className="ref-customer-intro"><h1 className="ref-page-title">{priorityMode ? "今日重点客户" : "今天该跟谁"}</h1><p>{priorityMode ? "仅展示首页“今日重点客户”统计中的非维护期客户；与首页使用同一分池规则。" : "与首页使用同一分池规则；“今日到店”包含今天已到店或已预约的客户。"}</p></section>
         <label className="ref-search"><SearchIcon /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索姓名、电话或当前需求" aria-label="搜索客户" /></label>
         <div className="ref-customer-tabs" aria-label="客户分组筛选">{TABS.map((tab) => <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`ref-customer-tab ${activeTab === tab.key ? "active" : ""}`}><span>{tab.label}</span><b>{tabCounts[tab.key] || 0}</b></button>)}</div>
         <section className="mt-4 space-y-3">

@@ -110,7 +110,61 @@ function ReviewBlock({ title, content, hint }: { title: string; content: any; hi
   );
 }
 
-function scoreColor(v: number): string {
+function evidenceItems(value: any): any[] {
+  if (Array.isArray(value)) return value.filter((item) => item && typeof item === "object");
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item === "object") : [];
+  } catch { return []; }
+}
+
+/**
+ * 深度复盘的可审计依据：将“事实（转写）”“门店资料”“系统方法论”明确拆开。
+ * 资料引用展示的是分析生成当时写进 report 的快照，避免后续检索结果被误当成历史依据。
+ */
+function EvidenceSnapshotBlock({ analysis, onOpenTranscript }: { analysis: any; onOpenTranscript: () => void }) {
+  const knowledge = evidenceItems(analysis?.knowledge_sources);
+  const methodology = evidenceItems(analysis?.methodology_sources);
+  const snapshotAt = analysis?.evidence_snapshot_at ? new Date(analysis.evidence_snapshot_at) : null;
+  const snapshotLabel = snapshotAt && !Number.isNaN(snapshotAt.getTime())
+    ? snapshotAt.toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "历史报告未记录快照时间";
+
+  return (
+    <section className="rounded-2xl border border-[var(--green-light)] bg-[var(--green-soft)]/40 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-[14px] font-semibold text-[var(--ink)]">复盘依据与引用可信度</h3><p className="mt-1 text-[10px] leading-relaxed text-[var(--faint)]">引用快照：{snapshotLabel}</p></div><span className="rounded-full bg-white px-2 py-1 text-[10px] font-medium text-[var(--green-dark)]">可追溯</span></div>
+      <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">{analysis?.evidence_policy || "事实判断以本次逐句转写为准；门店资料用于校准本店口径；系统销售方法论仅用于沟通与决策策略。"}</p>
+
+      <div className="mt-3 rounded-xl border border-[var(--line)] bg-white p-3">
+        <div className="flex items-center justify-between gap-2"><p className="text-[12px] font-semibold text-[var(--ink)]">事实依据：本次逐句转写</p><button onClick={onOpenTranscript} className="text-[11px] font-medium text-[var(--green-dark)] underline underline-offset-2">查看原文</button></div>
+        <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">深度判断中的客户表达、员工行为与风险结论，均应能回到对话记录核验；无法从原文核验的内容会被视为推断，不作为客户事实。</p>
+      </div>
+
+      <div className="mt-2 rounded-xl border border-[var(--line)] bg-white p-3">
+        <p className="text-[12px] font-semibold text-[var(--ink)]">门店资料引用（{knowledge.length}）</p>
+        {knowledge.length > 0 ? <div className="mt-2 space-y-2">{knowledge.map((item, index) => {
+          const documentId = item.document_id || item.documentId;
+          return <div key={`${documentId || item.chunk_id || item.chunkId || item.title}-${index}`} className="rounded-lg bg-[var(--surface-2)]/70 px-2.5 py-2"><div className="flex items-center justify-between gap-2"><b className="text-[11px] text-[var(--ink)]">{index + 1}. {item.title || item.documentTitle || "门店资料"}</b>{documentId && <Link href={`/knowledge?source=${encodeURIComponent(String(documentId))}`} className="shrink-0 text-[10px] font-medium text-[var(--green-dark)] underline underline-offset-2">查看原资料</Link>}</div>{(item.excerpt || item.snippet || item.content) && <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--muted)]">{item.excerpt || item.snippet || item.content}</p>}</div>;
+        })}</div> : <p className="mt-1 text-[11px] leading-relaxed text-[var(--faint)]">本次没有命中可用门店资料；报告不会把通用建议表述为本店既定规则。</p>}
+      </div>
+
+      <div className="mt-2 rounded-xl border border-[var(--line)] bg-white p-3">
+        <p className="text-[12px] font-semibold text-[var(--ink)]">系统销售方法论引用（{methodology.length}）</p>
+        {methodology.length > 0 ? <div className="mt-2 space-y-2">{methodology.map((item, index) => <div key={`${item.id || item.title}-${index}`} className="rounded-lg bg-[var(--surface-2)]/70 px-2.5 py-2"><b className="text-[11px] text-[var(--ink)]">{index + 1}. {item.title || "系统销售方法论"}{item.module || item.category ? ` · ${item.module || item.category}` : ""}</b>{(item.excerpt || item.content) && <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--muted)]">{item.excerpt || item.content}</p>}{item.source && <p className="mt-1 text-[10px] text-[var(--faint)]">来源：{item.source}</p>}</div>)}</div> : <p className="mt-1 text-[11px] leading-relaxed text-[var(--faint)]">本次未使用系统销售方法论；因此不会附带方法论结论。</p>}
+      </div>
+    </section>
+  );
+}
+
+function optionalScore(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const score = typeof value === "number" ? value : Number(String(value).trim());
+  return Number.isFinite(score) && score >= 0 && score <= 100 ? Math.round(score) : null;
+}
+
+function scoreColor(v: number | null): string {
+  if (v === null) return "var(--faint)";
   if (v >= 80) return "var(--green)";
   if (v >= 60) return "var(--yellow)";
   return "var(--red)";
@@ -131,28 +185,67 @@ function transcriptTime(seconds: unknown): string {
   return `${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`;
 }
 
-function QualityScoreCard({ score, dims }: { score: number; dims: { label: string; value: number }[] }) {
+type QualityDimension = { label: string; value: number | null; weight: string; evidence?: any };
+
+function QualityScoreCard({
+  score, baseScore, status, message, formula, dims,
+}: {
+  score: number | null;
+  baseScore: number | null;
+  status?: string;
+  message?: string;
+  formula?: string;
+  dims: QualityDimension[];
+}) {
+  const statusCopy: Record<string, { title: string; className: string }> = {
+    scored: { title: score !== null && score >= 75 ? "可提交经验审核" : "已完成量表评估", className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+    incomplete: { title: "评估不完整", className: "border-slate-200 bg-slate-50 text-slate-700" },
+    serious_risk: { title: "严重合规风险", className: "border-amber-200 bg-amber-50 text-amber-900" },
+    redline: { title: "合规红线", className: "border-red-200 bg-red-50 text-red-800" },
+    legacy: { title: "历史评分", className: "border-slate-200 bg-slate-50 text-slate-700" },
+  };
+  const state = statusCopy[status || "legacy"] || statusCopy.legacy;
+  const displayScore = score === null ? "—" : score;
+  const hasRiskOverride = (status === "serious_risk" || status === "redline") && baseScore !== null && baseScore !== score;
+
   return (
     <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
       <div className="flex items-center gap-4">
         <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-full border-2"
           style={{ borderColor: scoreColor(score) }}>
-          <span className="text-[22px] font-bold leading-none" style={{ color: scoreColor(score) }}>{score}</span>
+          <span className="text-[22px] font-bold leading-none" style={{ color: scoreColor(score) }}>{displayScore}</span>
           <span className="text-[9px] text-[var(--faint)] mt-0.5">综合分</span>
         </div>
-        <div className="flex-1 space-y-1.5">
+        <div className="flex-1">
+          <div className="mb-1 flex flex-wrap items-center gap-1.5">
+            <span className="text-[13px] font-semibold text-[var(--ink)]">会谈质量评估</span>
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${state.className}`}>{state.title}</span>
+          </div>
+          <p className="text-[10px] leading-relaxed text-[var(--faint)]">执行质量信号，不等同于成交概率或员工绩效。</p>
+        </div>
+      </div>
+
+      {(message || formula) && (
+        <div className={`mt-3 rounded-xl border px-3 py-2 text-[11px] leading-relaxed ${state.className}`}>
+          {message && <p>{message}</p>}
+          {hasRiskOverride && <p className="mt-1">原始加权分 {baseScore}，已按合规风险规则调整为 {score}。</p>}
+          {formula && <p className="mt-1 opacity-80">计算方式：{formula}</p>}
+        </div>
+      )}
+
+      <div className="mt-3 space-y-2.5">
           {dims.map((d) => (
-            <div key={d.label}>
+            <div key={d.label} className="rounded-lg bg-[var(--surface-2)]/50 px-2.5 py-2">
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-[var(--muted)]">{d.label}</span>
-                <span className="font-medium" style={{ color: scoreColor(d.value) }}>{d.value}</span>
+                <span className="text-[var(--muted)]">{d.label} <span className="text-[var(--faint)]">{d.weight}</span></span>
+                <span className="font-medium" style={{ color: scoreColor(d.value) }}>{d.value === null ? "待补" : d.value}</span>
               </div>
               <div className="mt-0.5 h-1.5 w-full rounded-full bg-[var(--surface-2)]">
-                <div className="h-1.5 rounded-full" style={{ width: `${d.value}%`, backgroundColor: scoreColor(d.value) }} />
+                <div className="h-1.5 rounded-full" style={{ width: `${d.value ?? 0}%`, backgroundColor: scoreColor(d.value) }} />
               </div>
+              {clean(d.evidence) ? <p className="mt-1 text-[10px] leading-relaxed text-[var(--faint)]">依据：{clean(d.evidence)}</p> : <p className="mt-1 text-[10px] text-[var(--faint)]">未提供转写依据</p>}
             </div>
           ))}
-        </div>
       </div>
     </div>
   );
@@ -295,6 +388,18 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
     if (retrying) return;
     setRetrying(true);
     try {
+      // 上传请求可能在服务端已落盘后才在手机侧断线。先核验服务端，避免对同一段
+      // 录音重复提交并产生两条 ASR 任务。
+      const check = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then(r => r.json()).catch(() => null);
+      const remote = check?.code === 200 ? check.data : null;
+      if (remote?.audio_url) {
+        await discardPendingUpload(meetingId);
+        setPendingLocalUpload(false);
+        setM(remote);
+        return;
+      }
       const result = await retryPendingUpload(meetingId);
       if (!result.ok) throw new Error(result.error || "重新上传失败");
       setPendingLocalUpload(false);
@@ -568,7 +673,16 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
       {/* 分析卡片 */}
       <div className="mx-4 mt-4">
         {m.status !== "done" ? (
-          ["queued", "submitting", "transcribing", "analyzing"].includes(m.status) ? (
+          pendingLocalUpload && !m.audio_url && ["recording", "failed"].includes(m.status) ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[12px] text-amber-900">
+              <p className="font-medium">录音尚未确认上传完成</p>
+              <p className="mt-1 leading-relaxed">这段录音仍安全保留在本设备。恢复网络后可重新上传；系统会先核验服务器，避免重复提交。</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={handleRetryLocalUpload} disabled={retrying} className="rounded-full bg-[var(--green)] px-3 py-1.5 font-medium text-white disabled:opacity-50">{retrying ? "上传中…" : "重新上传当前录音"}</button>
+                <button onClick={async () => { await discardPendingUpload(meetingId); setPendingLocalUpload(false); }} disabled={retrying} className="rounded-full border border-amber-300 px-3 py-1.5 text-amber-800 disabled:opacity-50">放弃本地录音</button>
+              </div>
+            </div>
+          ) : ["queued", "submitting", "transcribing", "analyzing"].includes(m.status) ? (
             <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
               <MeetingProcessing id={meetingId} initialStatus={m.status} onCompleted={() => window.location.reload()} />
               {m.status === "transcribing" && !m.asr_task_id && (
@@ -630,12 +744,16 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
             {/* 量化评分 */}
             <div className="mt-3">
               <QualityScoreCard
-                score={Number(analysis.quality_score ?? 60)}
+                score={optionalScore(analysis.quality_score)}
+                baseScore={optionalScore(analysis.quality_score_base)}
+                status={typeof analysis.quality_score_status === "string" ? analysis.quality_score_status : undefined}
+                message={typeof analysis.quality_score_message === "string" ? analysis.quality_score_message : undefined}
+                formula={typeof analysis.quality_score_formula === "string" ? analysis.quality_score_formula : undefined}
                 dims={[
-                  { label: "需求挖掘", value: Number(analysis.need_digging_score ?? 60) },
-                  { label: "成交推进", value: Number(analysis.deal_advancing_score ?? 60) },
-                  { label: "合规表现", value: Number(analysis.compliance_score ?? 60) },
-                  { label: "服务体验", value: Number(analysis.service_score ?? 60) },
+                  { label: "需求挖掘", weight: "25%", value: optionalScore(analysis.need_digging_score), evidence: analysis.need_digging_evidence },
+                  { label: "成交推进", weight: "30%", value: optionalScore(analysis.deal_advancing_score), evidence: analysis.deal_advancing_evidence },
+                  { label: "合规表现", weight: "20%", value: optionalScore(analysis.compliance_score), evidence: analysis.compliance_evidence },
+                  { label: "服务体验", weight: "25%", value: optionalScore(analysis.service_score), evidence: analysis.service_evidence },
                 ]}
               />
             </div>
@@ -679,6 +797,7 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
               <div className="text-[15px] font-semibold text-[var(--ink)]">深度复盘</div>
               <p className="mt-1 text-[11px] leading-relaxed text-[var(--faint)]">先以逐句转写为事实依据；门店资料校准本店口径，系统销售方法论补充客户决策与沟通策略。两类依据会分别标明，推断不会当作客户已确认的信息。</p>
             </div>
+            <EvidenceSnapshotBlock analysis={analysis} onOpenTranscript={() => setTab("transcript")} />
             <ReviewBlock title="客户决策与深层需求" content={analysis.customer_decision_stage || analysis.emotional_needs} />
             <ReviewBlock title="本次判断依据" content={analysis.judgement_basis} hint="围绕需求挖掘、价值呈现、异议处理、成交推进、合规与服务体验逐项回看。" />
             <ReviewBlock title="做得对的地方" content={analysis.employee_did_well} />

@@ -35,9 +35,46 @@ relay_ready() {
 open_app() {
   local app_url="http://localhost:3000/start"
 
-  # `open -a Chrome URL` 在这台 Mac 上会静默成功却不新建标签页；以新窗口
-  # 参数唤起 Chrome 已实测可用。若 Chrome 不可用，再回退到默认浏览器。
-  open -na "Google Chrome" --args --new-window "$app_url" >/dev/null 2>&1 || open "$app_url" >/dev/null 2>&1
+  # 优先复用用户正在使用的 Chrome：已有门店助手标签则刷新它；没有才在当前
+  # Chrome 窗口新建一个标签。绝不再用 --new-window 或启动独立 Chrome 实例。
+  if osascript - "$app_url" <<'APPLESCRIPT' >/dev/null 2>&1
+on run argv
+  set appUrl to item 1 of argv
+  tell application "Google Chrome"
+    if not running then launch
+    activate
+    if (count of windows) = 0 then make new window
+
+    set targetWindow to front window
+    set existingAppTab to missing value
+    repeat with candidateWindow in windows
+      repeat with candidateTab in tabs of candidateWindow
+        set candidateUrl to URL of candidateTab
+        if candidateUrl starts with "http://localhost:3000/" or candidateUrl starts with "http://127.0.0.1:3000/" then
+          set existingAppTab to candidateTab
+          set targetWindow to candidateWindow
+          exit repeat
+        end if
+      end repeat
+      if existingAppTab is not missing value then exit repeat
+    end repeat
+
+    if existingAppTab is missing value then
+      tell targetWindow to make new tab with properties {URL:appUrl}
+    else
+      set URL of existingAppTab to appUrl
+      set active tab index of targetWindow to index of existingAppTab
+    end if
+    set index of targetWindow to 1
+  end tell
+end run
+APPLESCRIPT
+  then
+    return 0
+  fi
+
+  # 自动化权限尚未授予时，也只尝试使用现有 Chrome，不回退到其他浏览器。
+  open -a "Google Chrome" "$app_url" >/dev/null 2>&1 || true
 }
 
 wait_until_ready() {
