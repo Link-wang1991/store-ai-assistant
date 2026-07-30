@@ -1,155 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthContext } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { analyzeImage } from "@/lib/ai/multimodal";
 import { readServerToken } from "@/lib/server-cookie";
-import { API_BASE_URL } from "@/lib/data-source";
+import { BACKEND_API_BASE_URL } from "@/lib/data-source";
 
 export const runtime = "nodejs";
-// 图片体积可能较大
-export const maxDuration = 60;
+export const maxDuration = 120;
 
-async function writeChatRecord(path: string, method: "POST" | "PUT", body: Record<string, unknown>) {
-  const token = await readServerToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload?.code !== 200) {
-    throw new Error(`${payload?.message || "图片会话保存失败"}（${method} ${path}）`);
-  }
-  return payload.data ?? {};
+function clipped(value: string, max = 2_400) {
+  const clean = value.replace(/\s+/g, " ").trim();
+  return clean.length <= max ? clean : `${clean.slice(0, max)}…`;
 }
 
-async function handlePost(req: NextRequest) {
-  const ctx = await getAuthContext();
-  if (!ctx) return NextResponse.json({ error: "未登录或账号已停用" }, { status: 401 });
+/**
+ * 图片先由视觉模型做“客观信息提取”，再交给 Java 的正式 AI 教练管线。
+ *
+ * 这样图片、文字和会谈使用同一份客户权限、门店资料、系统销售方法论、风险规则、
+ * 会话持久化与任务提案逻辑；不再通过旧 Proxy 直接写 chat_messages。
+ */
+export async function POST(request: NextRequest) {
+  const token = await readServerToken();
+  if (!token) return NextResponse.json({ error: "登录已失效，请重新登录后再分析图片。" }, { status: 401 });
 
-  let body: any;
+  let body: { imageUrl?: string; hint?: string; sessionId?: string; customerId?: string };
   try {
-    body = await req.json();
+    body = await request.json();
   } catch {
     return NextResponse.json({ error: "请求格式错误" }, { status: 400 });
   }
-
-  const imageUrl: string = body?.imageUrl || "";
-  const hint: string = body?.hint || "";
-  const requestedCustomerId: string | null = typeof body?.customerId === "string" && body.customerId.trim()
-    ? body.customerId.trim()
-    : null;
+  const imageUrl = typeof body.imageUrl === "string" ? body.imageUrl : "";
+  const hint = typeof body.hint === "string" ? body.hint.trim() : "";
   if (!imageUrl) return NextResponse.json({ error: "缺少图片" }, { status: 400 });
 
-  const canManageCustomers = ["owner", "manager", "admin"].includes(ctx.employee.role);
-  let customer: any = null;
-  if (requestedCustomerId) {
-    customer = await db.customers.getById(requestedCustomerId, ctx.store.id);
-    if (!customer) return NextResponse.json({ error: "客户不存在或不属于当前门店" }, { status: 404 });
-    const assignee = customer.assigned_to || customer.assignedTo || null;
-    if (!canManageCustomers && assignee !== ctx.employee.id) {
-      return NextResponse.json({ error: "无权使用该客户的上下文" }, { status: 403 });
-    }
-  }
-
   try {
-  let sessionId: string = body?.sessionId || "";
-  let sessionCustomerId: string | null = null;
-  if (sessionId) {
-    const s = await db.chat.getSession(sessionId, ctx.employee.id);
-    if (!s) {
-      sessionId = "";
-    } else {
-      sessionCustomerId = s.customer_id || s.customerId || null;
-      if (requestedCustomerId && sessionCustomerId && requestedCustomerId !== sessionCustomerId) {
-        return NextResponse.json({ error: "该会话已关联其他客户，请新建对话后再切换客户" }, { status: 400 });
-      }
-      if (requestedCustomerId && !sessionCustomerId) {
-        await writeChatRecord(`/api/proxy/chat_sessions/${sessionId}`, "PUT", { customer_id: requestedCustomerId });
-        sessionCustomerId = requestedCustomerId;
-      }
+    // 视觉层不拥有客户、会话或业务写权限；它只输出图片的客观观察结果。
+    const vision = await analyzeImage({ imageUrl, role: "consultant", hint });
+    const safetyPrefix = vision.needsUpgrade
+      ? "系统图片安全检查：疑似涉及皮肤、术后或其他需负责人介入的情况，必须按高风险升级处理，不得自行做医疗判断。\n"
+      : "";
+    const question = `${safetyPrefix}[图片辅助分析${hint ? ` · ${hint}` : ""}]\n图片识别的客观信息：${clipped(vision.text)}\n\n请结合当前客户上下文、门店资料和系统销售方法论，给出可执行但不越权的沟通建议。`;
+    const upstream = await fetch(`${BACKEND_API_BASE_URL.replace(/\/$/, "")}/api/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "X-Idempotency-Key": `vision-${crypto.randomUUID()}`,
+      },
+      body: JSON.stringify({
+        question,
+        sessionId: typeof body.sessionId === "string" && body.sessionId.trim() ? body.sessionId.trim() : null,
+        customerId: typeof body.customerId === "string" && body.customerId.trim() ? body.customerId.trim() : null,
+      }),
+      cache: "no-store",
+    });
+    const payload = await upstream.json().catch(() => ({}));
+    if (!upstream.ok || payload?.code !== 200 || !payload?.data) {
+      return NextResponse.json({ error: payload?.message || "图片信息已识别，但 AI 教练暂时无法生成建议。" }, { status: upstream.status || 502 });
     }
-  }
-  const effectiveCustomerId = requestedCustomerId || sessionCustomerId;
-  if (!sessionId) {
-    const s = await writeChatRecord("/api/proxy/chat_sessions", "POST", {
-      employee_id: ctx.employee.id,
-      role: ctx.employee.role,
-      title: "图片识别",
-      customer_id: effectiveCustomerId,
-    });
-    if (!s?.id) throw new Error("图片会话创建失败");
-    sessionId = s.id;
-  }
-
-  if (!customer && effectiveCustomerId) {
-    customer = await db.customers.getById(effectiveCustomerId, ctx.store.id);
-  }
-  const customerHint = customer
-    ? `当前客户：${customer.name || "未命名"}；阶段：${customer.stage || "未记录"}；顾虑：${customer.concerns || "未记录"}`
-    : "";
-  const contextualHint = [hint, customerHint].filter(Boolean).join("；");
-
-    const result = await analyzeImage({
-      imageUrl,
-      role: ctx.employee.role as any,
-      hint: contextualHint,
-    });
-    const riskLevel = result.needsUpgrade ? "L4" : "L1";
-    const answerType = result.needsUpgrade ? "risk" : "knowledge";
-
-    const msg = await writeChatRecord("/api/proxy/chat_messages", "POST", {
-      session_id: sessionId,
-      store_id: ctx.store.id,
-      employee_id: ctx.employee.id,
-      role: ctx.employee.role,
-      content: "[图片]" + (hint ? ` ${hint}` : ""),
-      user_message: "[图片]" + (hint ? ` ${hint}` : ""),
-      ai_response: result.text,
-      question_category: "其他问题",
-      risk_level: riskLevel,
-      answer_type: answerType,
-      needs_review: result.needsUpgrade,
-      customer_id: effectiveCustomerId,
-    });
-    if (!msg?.id) throw new Error("图片消息保存失败");
-    await db.chat.touchSession(sessionId);
-
-    // 涉及皮肤/术后等 → 进风险记录
-    if (result.needsUpgrade) {
-      await db.risks.create({
-        store_id: ctx.store.id,
-        employee_id: ctx.employee.id,
-        question: "[图片] 客户反馈/皮肤相关，需人工判断",
-        ai_response: result.text,
-        risk_type: "医美健康异常",
-        risk_level: "L4",
-        status: "open",
-        customer_id: effectiveCustomerId,
-      });
-    }
-
-    return NextResponse.json({
-      sessionId,
-      messageId: msg.id,
-      answer: result.text,
-      riskLevel,
-      answerType,
-      needsUpgrade: result.needsUpgrade,
-      customerId: effectiveCustomerId,
-    });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message || "图片处理失败" }, { status: 500 });
-  }
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    return await handlePost(req);
-  } catch (error: any) {
-    return NextResponse.json({ error: error?.message || "图片处理失败" }, { status: 500 });
+    return NextResponse.json({ ...payload.data, needsUpgrade: vision.needsUpgrade });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "图片处理失败";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

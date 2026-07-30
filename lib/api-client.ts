@@ -53,29 +53,39 @@ export function setToken(token: string | null) {
 // 通用 fetch 封装（backend 模式）
 // ============================================================
 
+type BackendRequestOptions = Omit<RequestInit, "body"> & {
+  body?: any;
+  /** AI/上传等长链路可覆盖默认超时；普通读取保持较短，避免页面无限转圈。 */
+  timeoutMs?: number;
+  /** 后端用于把网络重试识别为同一次业务动作。 */
+  idempotencyKey?: string;
+};
+
 async function backendApi<T>(
   path: string,
-  options: Omit<RequestInit, "body"> & { body?: any } = {}
+  options: BackendRequestOptions = {}
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
+  const { timeoutMs, idempotencyKey, ...fetchOptions } = options;
   const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(options.headers as Record<string, string> || {}),
+    ...(fetchOptions.headers as Record<string, string> || {}),
   };
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
+  if (idempotencyKey) headers["X-Idempotency-Key"] = idempotencyKey;
 
-  // 防止后端未就绪时 fetch 永久挂起导致页面一直转圈
+  // 普通读取不应无限转圈；AI 生成和文件处理可传入更长的业务级超时。
   const controller = new AbortController();
-  const timeoutMs = 10000;
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const effectiveTimeoutMs = timeoutMs ?? 20_000;
+  const timer = setTimeout(() => controller.abort(), effectiveTimeoutMs);
 
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
+      ...fetchOptions,
       headers,
-      body: options.body ? JSON.stringify(options.body) : options.body,
+      body: fetchOptions.body ? JSON.stringify(fetchOptions.body) : fetchOptions.body,
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -87,7 +97,7 @@ async function backendApi<T>(
   } catch (e: any) {
     clearTimeout(timer);
     if (e?.name === "AbortError") {
-      return { ok: false, error: "请求超时，请确认后端服务(8080)已启动" };
+      return { ok: false, error: "请求等待超时；服务可能仍在后台处理中，请稍后刷新或安全重试。" };
     }
     return { ok: false, error: e?.message || "网络错误" };
   }
@@ -231,11 +241,20 @@ export const knowledgeApi = {
     return backendApi<void>(`/api/knowledge/${id}/delete`, { method: "POST" });
   },
 
+  updateLifecycle: (id: string, input: { reviewStatus: string; effectiveAt?: string; expiresAt?: string; reviewDueAt?: string; versionLabel?: string; reviewNote?: string }) =>
+    backendApi<any>(`/api/knowledge/${encodeURIComponent(id)}/lifecycle`, { method: "POST", body: input }),
+
   reindexEmbeddings: () => {
     return backendApi<{ total: number; indexed: number; failed: number; model: string }>(
       "/api/knowledge/reindex-embeddings", { method: "POST" },
     );
   },
+
+  runRetrievalEvaluation: (question: string, expectedDocumentId?: string) =>
+    backendApi<any>("/api/knowledge/evaluations", { method: "POST", body: { question, expectedDocumentId: expectedDocumentId || undefined } }),
+  listRetrievalEvaluations: () => backendApi<any>("/api/knowledge/evaluations"),
+  reviewRetrievalEvaluation: (id: string, status: "pass" | "fail" | "unrated", note?: string) =>
+    backendApi<any>(`/api/knowledge/evaluations/${encodeURIComponent(id)}/review`, { method: "POST", body: { status, note } }),
 };
 
 // -- 会谈经验审核 --
@@ -276,6 +295,7 @@ export type ChatMessageItem = {
   text: string;
   riskLevel?: string;
   answerType?: string;
+  generationMode?: "model" | "fallback" | "safety_rule" | "legacy" | string;
   feedbackType?: string | null;
   retrieved?: { chunkId?: string; documentId?: string; documentTitle?: string; snippet: string }[];
   methodology?: { id?: string; scenarioKey?: string; title: string; module?: string; source?: string }[];
@@ -309,15 +329,17 @@ export type SessionItem = {
 
 // -- AI 对话 --
 export const chatApi = {
-  ask: (question: string, sessionId?: string | null, customerId?: string) => {
+  ask: (question: string, sessionId?: string | null, customerId?: string, requestId?: string) => {
     return backendApi<{
       sessionId: string; answer: string; answerType: string;
-      riskLevel: string; messageId: string;
+      riskLevel: string; messageId: string; generationMode: "model" | "fallback" | "safety_rule" | "legacy" | string;
       retrieved: { chunkId?: string; documentId?: string; documentTitle?: string; snippet: string }[];
       methodology: { id?: string; scenarioKey?: string; title: string; module?: string; source?: string }[];
     }>("/api/chat", {
       method: "POST",
       body: { question, sessionId, customerId },
+      timeoutMs: 100_000,
+      idempotencyKey: requestId,
     });
   },
 
@@ -378,7 +400,7 @@ export const taskApi = {
   updateStatus: (id: string, status: string) =>
     backendApi<any>(`/api/tasks/${id}/status?status=${status}`, { method: "POST" }),
   complete: (id: string, outcome: string, note?: string) =>
-    backendApi<{ task_id: string; outcome: string; next_action: string }>(`/api/tasks/${id}/complete`, {
+    backendApi<{ task_id: string; outcome: string; business_outcome_status: string; requires_result_verification: boolean; next_action: string }>(`/api/tasks/${id}/complete`, {
       method: "POST", body: { outcome, note },
     }),
 };
@@ -408,6 +430,7 @@ export const memoryConfirmationApi = {
 export const meetingApi = {
   list: () => backendApi<any[]>("/api/meetings"),
   countUnanalyzed: () => backendApi<{ count: number }>("/api/meetings/unanalyzed-count"),
+  qualityCalibration: () => backendApi<any>("/api/meetings/quality-calibration"),
   create: (customerId: string, scene: string) =>
     backendApi<any>("/api/meetings", { method: "POST", body: { customerId, scene } }),
   delete: (id: string) =>
@@ -446,4 +469,8 @@ export const dataLifecycleApi = {
       method: "POST",
       body: { confirmation },
     }),
+};
+
+export const operationsApi = {
+  overview: () => backendApi<any>("/api/admin/operations/overview"),
 };

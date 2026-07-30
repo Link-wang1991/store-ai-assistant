@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getToken } from "@/lib/api-client";
 import { API_BASE_URL } from "@/lib/data-source";
 import { useRecording } from "@/components/RecordingContext";
@@ -15,8 +15,8 @@ export function MeetingClient({ myCustomers, otherCustomers, onRefresh }: {
   onRefresh?: () => void;
 }) {
   const {
-    isRecording, isPaused, isStopping, timer,
-    startRecording, pauseRecording, resumeRecording, stopRecording,
+    isRecording, isPaused, isStopping, isUploading, uploadProgress, uploadStatus, timer,
+    startRecording, uploadExistingAudio, pauseRecording, resumeRecording, stopRecording,
   } = useRecording();
 
   // setup 表单
@@ -30,6 +30,7 @@ export function MeetingClient({ myCustomers, otherCustomers, onRefresh }: {
   const [scenes, setScenes] = useState<SceneOption[]>([]);
   const [consented, setConsented] = useState(true);
   const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
+  const audioFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const t = getToken();
@@ -91,6 +92,20 @@ export function MeetingClient({ myCustomers, otherCustomers, onRefresh }: {
     }
   }
 
+  async function uploadExisting(file?: File) {
+    if (starting || !file) return;
+    setStarting(true); setError("");
+    try {
+      if (!consented) { setError("请先确认已向客户告知并获得同意"); return; }
+      if (!isNewCustomer && !customerId) { setError("请选择客户"); return; }
+      const result = await uploadExistingAudio({ isNewCustomer, customerId, customerName, scene }, file);
+      if (!result.ok) setError(result.error || "音频上传失败");
+    } finally {
+      setStarting(false);
+      if (audioFileRef.current) audioFileRef.current.value = "";
+    }
+  }
+
   const allCustomers = [...myCustomers, ...otherCustomers];
   const selected = allCustomers.find((c) => c.id === customerId);
   const sceneOptions = scenes.length ? scenes : [
@@ -102,10 +117,10 @@ export function MeetingClient({ myCustomers, otherCustomers, onRefresh }: {
 
   return (
     <div className="px-4 pb-1 pt-5">
-      {isRecording && (
+      {(isRecording || isUploading) && (
         <div className="ref-card mb-4 flex items-center justify-between border-[#cfe9d7] bg-[#fbfffc] px-3 py-2.5">
-          <div className="flex items-center gap-3"><span className="relative flex h-8 w-8 items-center justify-center"><span className="absolute h-7 w-7 animate-ping rounded-full bg-red-400/25"/><span className="h-2.5 w-2.5 rounded-full bg-red-500"/></span><div><b className="block text-[12px] text-[#263128]">{isStopping ? "正在上传录音" : isPaused ? "录音已暂停" : "录音中"}</b><span className="text-[11px] font-bold text-red-500">{timer}</span></div></div>
-          {!isStopping && <div className="flex gap-2"><button onClick={() => { isPaused ? resumeRecording() : pauseRecording(); }} className="ref-secondary h-8 min-h-0 px-2.5">{isPaused ? "继续" : "暂停"}</button><button onClick={stopRecording} className="h-8 rounded-full bg-red-500 px-3 text-[11px] font-bold text-white">结束</button></div>}
+          <div className="flex items-center gap-3"><span className="relative flex h-8 w-8 items-center justify-center"><span className={`absolute h-7 w-7 animate-ping rounded-full ${isUploading ? "bg-emerald-400/25" : "bg-red-400/25"}`}/><span className={`h-2.5 w-2.5 rounded-full ${isUploading ? "bg-emerald-500" : "bg-red-500"}`}/></span><div><b className="block text-[12px] text-[#263128]">{isUploading ? (uploadStatus || "正在上传录音") : isPaused ? "录音已暂停" : "录音中"}</b><span className={`text-[11px] font-bold ${isUploading ? "text-emerald-600" : "text-red-500"}`}>{isUploading ? `${uploadProgress}%` : timer}</span></div></div>
+          {!isStopping && !isUploading && <div className="flex gap-2"><button onClick={() => { isPaused ? resumeRecording() : pauseRecording(); }} className="ref-secondary h-8 min-h-0 px-2.5">{isPaused ? "继续" : "暂停"}</button><button onClick={stopRecording} className="h-8 rounded-full bg-red-500 px-3 text-[11px] font-bold text-white">结束</button></div>}
         </div>
       )}
       <section>
@@ -160,7 +175,10 @@ export function MeetingClient({ myCustomers, otherCustomers, onRefresh }: {
           <div><label className="ref-eyebrow block">会谈场景</label><div className="ref-scene-wrap mt-2">{sceneOptions.map((s) => <button key={s.code} onClick={() => setScene(s.code)} className={`ref-chip ${scene === s.code ? "active" : ""}`}>{s.display_name}</button>)}</div></div>
           <label className="ref-consent"><input checked={consented} onChange={(e) => setConsented(e.target.checked)} type="checkbox" />已向客户告知并获得同意</label>
           {error && <p className="-mt-2 text-[12px] text-[#d84436]">{error}</p>}
-          <button onClick={startMeeting} disabled={starting || isRecording} className="ref-primary min-h-[52px] w-full gap-2 text-[15px]"><svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17v4M8.5 21h7"/></svg>{starting ? "准备中…" : isRecording ? "会谈进行中" : "开始录音会谈"}</button>
+          <button onClick={startMeeting} disabled={starting || isRecording || isUploading} className="ref-primary min-h-[52px] w-full gap-2 text-[15px]"><svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17v4M8.5 21h7"/></svg>{starting || isUploading ? "正在准备/上传…" : isRecording ? "会谈进行中" : "开始录音会谈"}</button>
+          <input ref={audioFileRef} type="file" accept="audio/*,.m4a,.aac,.mp3,.webm,.mp4" className="hidden" onChange={(event) => void uploadExisting(event.target.files?.[0])} />
+          <button type="button" onClick={() => audioFileRef.current?.click()} disabled={starting || isRecording || isUploading} className="ref-secondary min-h-[42px] w-full text-[13px] disabled:opacity-50">上传已有录音转写</button>
+          <p className="-mt-1 text-center text-[10px] leading-relaxed text-[#738077]">iPhone 通过局域网 HTTP 访问时，Safari 可能禁止网页麦克风；可先用“语音备忘录”录音，再在这里上传，仍会生成逐字稿和会谈分析。</p>
         </div>
       </section>
     </div>

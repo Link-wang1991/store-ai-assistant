@@ -8,6 +8,7 @@ const TABS = [
   { href: "/admin/knowledge", label: "资料列表" },
   { href: "/admin/knowledge/gaps", label: "知识库缺口" },
   { href: "/admin/knowledge/standard", label: "标准答案" },
+  { href: "/admin/knowledge/evaluation", label: "检索质检" },
   { href: "/admin/knowledge/banned", label: "禁用词" },
 ];
 

@@ -11,8 +11,22 @@ import { decodeJwtPayload } from "@/lib/jwt";
 const OUTCOMES = [
   ["accepted", "已接受"], ["scheduled", "已预约"], ["concern", "仍有顾虑"],
   ["no_reply", "未回复"], ["not_interested", "暂不考虑"], ["escalate", "需要升级"],
-  ["wrong_info", "信息有误"],
+  ["wrong_info", "信息有误"], ["arrived", "已实际到店"], ["deal_closed", "已确认成交"],
+  ["risk_resolved", "风险已解决"], ["no_show", "预约未到店"],
 ] as const;
+
+const BUSINESS_OUTCOME_LABEL: Record<string, string> = {
+  pending: "尚未记录业务结果",
+  pending_verification: "动作已完成，业务结果待核验",
+  pending_reactivation: "本次未达成，等待后续唤醒",
+  verified: "业务结果已验证",
+};
+
+const RESULT_LABEL: Record<string, string> = {
+  accepted: "已接受", scheduled: "已预约", concern: "仍有顾虑", no_reply: "未回复",
+  not_interested: "暂不考虑", escalate: "需要升级", wrong_info: "信息有误",
+  arrived: "已实际到店", deal_closed: "已确认成交", risk_resolved: "风险已解决", no_show: "预约未到店",
+};
 
 function field(task: any, ...keys: string[]) {
   for (const key of keys) if (task?.[key] !== undefined && task?.[key] !== null) return task[key];
@@ -103,6 +117,9 @@ function TaskCard({ task, customer, onRefresh, onNotice }: { task: any; customer
   const methodologyEvidence = Array.isArray(field(task, "methodologyEvidence", "methodology_evidence")) ? field(task, "methodologyEvidence", "methodology_evidence") : [];
   const dueAt = field(task, "dueAt", "due_at", "deadline");
   const status = task.status || "todo";
+  const businessOutcome = String(field(task, "businessOutcomeStatus", "business_outcome_status") || "pending");
+  const resultCode = String(field(task, "resultCode", "result_code") || "");
+  const resultDetail = field(task, "resultDetail", "result_detail");
 
   async function start() {
     const result = await taskApi.updateStatus(task.id, "doing");
@@ -122,7 +139,7 @@ function TaskCard({ task, customer, onRefresh, onNotice }: { task: any; customer
   }
 
   return <article className="ref-card p-4">
-    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="text-[15px] font-bold text-[#172119]">{task.title || "待处理任务"}</h2><p className="mt-1 text-[11px] text-[#6c7b6d]">{customer?.name || (customerId ? "已关联客户" : "未关联客户")} · {source}{dueAt ? ` · 截止 ${String(dueAt).slice(0, 10)}` : " · 未设截止"}</p></div><span className={`ref-status ${status === "doing" ? "ref-status-blue" : "ref-status-green"}`}>{status === "doing" ? "处理中" : "待处理"}</span></div>
+    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="text-[15px] font-bold text-[#172119]">{task.title || "待处理任务"}</h2><p className="mt-1 text-[11px] text-[#6c7b6d]">{customer?.name || (customerId ? "已关联客户" : "未关联客户")} · {source}{dueAt ? ` · 截止 ${String(dueAt).slice(0, 10)}` : " · 未设截止"}</p></div><span className={`ref-status ${status === "doing" ? "ref-status-blue" : status === "done" ? "ref-status-green" : "ref-status-green"}`}>{status === "doing" ? "处理中" : status === "done" ? "动作已完成" : status === "canceled" ? "已取消" : "待处理"}</span></div>
     {task.content && <p className="mt-3 whitespace-pre-wrap text-[12px] leading-relaxed text-[#3d4a3e]">{task.content}</p>}
     <div className="mt-3 rounded-xl border border-[#d8e6da] bg-[#f7fbf6] p-3 text-[11px] leading-relaxed text-[#4a5f4e]">
       <p className="font-semibold">业务来源与闭环</p>
@@ -132,7 +149,8 @@ function TaskCard({ task, customer, onRefresh, onNotice }: { task: any; customer
       {knowledgeEvidence.length > 0 ? <div className="mt-2 border-t border-[#d8e6da] pt-2"><p className="font-medium text-[#4a5f4e]">当时引用的门店资料</p>{knowledgeEvidence.map((item: any, index: number) => <Link key={`${item.document_id || item.documentId || item.title}-${index}`} href={item.document_id || item.documentId ? `/knowledge?source=${encodeURIComponent(String(item.document_id || item.documentId))}` : "/knowledge"} className="mt-1 block text-[#006d37] underline underline-offset-2"><b>{item.title || "门店知识"}</b>{item.excerpt ? `：${item.excerpt}` : ""}</Link>)}</div> : <p className="mt-2 text-[#738077]">未记录门店资料引用；请以客户档案、会谈原文或人工业务依据为准。</p>}
       {methodologyEvidence.length > 0 && <div className="mt-2 border-t border-[#d8e6da] pt-2"><p className="font-medium text-[#4a5f4e]">系统销售方法论</p>{methodologyEvidence.map((item: any, index: number) => <p key={`${item.id || item.title}-${index}`} className="mt-1 text-[#66766a]"><b>{item.title || "销售方法论"}</b>{item.module ? ` · ${item.module}` : ""}{item.excerpt ? `：${item.excerpt}` : ""}</p>)}<p className="mt-1 text-[#738077]">仅用于沟通与决策策略，不替代门店规则。</p></div>}
     </div>
+    {status === "done" && <div className={`mt-3 rounded-xl border p-3 text-[11px] leading-relaxed ${businessOutcome === "verified" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}><p className="font-semibold">业务结果：{BUSINESS_OUTCOME_LABEL[businessOutcome] || businessOutcome}</p>{resultCode && <p className="mt-1">本次记录：{RESULT_LABEL[resultCode] || resultCode}</p>}{resultDetail && <p className="mt-1">说明：{String(resultDetail)}</p>}{businessOutcome !== "verified" && <p className="mt-1 text-amber-800">此任务只代表动作已执行；请继续完成系统生成的核验/跟进任务，记录到店、成交或风险处理结果后才算业务闭环。</p>}</div>}
     {status !== "done" && status !== "canceled" && <div className="mt-4 flex flex-wrap gap-2">{status === "todo" && <button onClick={() => void start()} className="ref-primary px-4">开始并打开 AI 教练</button>}<button onClick={() => setShowOutcome((value) => !value)} className="ref-secondary px-4">完成并记录结果</button></div>}
-    {showOutcome && <div className="mt-3 rounded-xl border border-[#d8e6da] bg-[#f7fbf6] p-3"><label className="block text-[11px] font-medium text-[#4a5f4e]">跟进结果<select value={outcome} onChange={(event) => setOutcome(event.target.value as typeof outcome)} className="mt-1.5 w-full rounded-lg border border-[#cfe0d1] bg-white px-2 py-2 text-[12px]">{OUTCOMES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="mt-2 block text-[11px] font-medium text-[#4a5f4e]">补充说明（可选）<textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} className="mt-1.5 w-full rounded-lg border border-[#cfe0d1] bg-white px-2 py-2 text-[12px]" /></label><button disabled={finishing} onClick={() => void complete()} className="ref-primary mt-3 w-full">{finishing ? "正在保存…" : "确认完成"}</button></div>}
+    {showOutcome && <div className="mt-3 rounded-xl border border-[#d8e6da] bg-[#f7fbf6] p-3"><label className="block text-[11px] font-medium text-[#4a5f4e]">跟进结果<select value={outcome} onChange={(event) => setOutcome(event.target.value as typeof outcome)} className="mt-1.5 w-full rounded-lg border border-[#cfe0d1] bg-white px-2 py-2 text-[12px]">{OUTCOMES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><p className="mt-1.5 text-[10px] leading-relaxed text-[#738077]">“已预约 / 已接受”只记为动作结果，系统会自动创建核验任务；只有“实际到店 / 已确认成交 / 风险已解决”才会标为已验证。</p><label className="mt-2 block text-[11px] font-medium text-[#4a5f4e]">补充说明（可选）<textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} className="mt-1.5 w-full rounded-lg border border-[#cfe0d1] bg-white px-2 py-2 text-[12px]" /></label><button disabled={finishing} onClick={() => void complete()} className="ref-primary mt-3 w-full">{finishing ? "正在保存…" : "确认完成并写入结果"}</button></div>}
   </article>;
 }

@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/ui";
 import { AdminBackHeader } from "@/components/AdminBackHeader";
 import { fmtDate } from "@/lib/format";
 import { KnowledgeReindexButton } from "@/components/KnowledgeReindexButton";
+import { KnowledgeLifecycleEdit } from "@/components/KnowledgeLifecycleEdit";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,7 @@ export default async function KnowledgeListPage() {
                 )}
               </div>
               {d.remark && <p className="mt-2 text-xs text-slate-400">备注：{d.remark}</p>}
+              {canEdit && <KnowledgeLifecycleEdit document={d} />}
               <div className="mt-3 flex gap-4 border-t border-slate-100 pt-2.5">
                 <ActionButton
                   action={toggleKnowledgeDoc.bind(null, d.id)}

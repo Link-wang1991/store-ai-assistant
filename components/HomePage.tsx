@@ -378,6 +378,7 @@ function TaskInboxCard({ task, userName, onStart, onPostpone, onConfirmMemory }:
   const sourceChatSessionId = task.source_chat_session_id || task.sourceChatSessionId;
   const sourceSummary = task.source_summary || task.sourceSummary;
   const sourceStatus = task.source_status || task.sourceStatus;
+  const sourceIntegrity = task.source_integrity || task.sourceIntegrity || "not_applicable";
   const sourceChain = Array.isArray(task.source_chain || task.sourceChain) ? (task.source_chain || task.sourceChain).map(String) : [];
   const knowledgeEvidence = Array.isArray(task.knowledge_evidence || task.knowledgeEvidence)
     ? (task.knowledge_evidence || task.knowledgeEvidence)
@@ -402,6 +403,9 @@ function TaskInboxCard({ task, userName, onStart, onPostpone, onConfirmMemory }:
         <div className="mt-2 rounded-lg border border-[#d8e6da] bg-white/70 p-2 text-[10px] leading-relaxed text-[#4a5f4e]">
           <p className="font-bold">来源追溯</p>
           <p className="mt-1">{sourceChain.length > 0 ? sourceChain.join(" → ") : sourceLabel}{sourceStatus ? ` · ${sourceStatus}` : ""}</p>
+          {sourceIntegrity === "captured" && <p className="mt-1 text-[#087a45]">✓ 当时的资料与方法论引用快照已保存。</p>}
+          {sourceIntegrity === "legacy_unavailable" && <p className="mt-1 text-amber-700">历史任务未保存来源快照，不能倒推或伪造引用。</p>}
+          {sourceIntegrity === "load_failed" && <p className="mt-1 text-red-700">来源暂时读取失败；请刷新后重试，任务本身未丢失。</p>}
           {sourceSummary && <p className="mt-1 text-[#66766a]">原始判断：{sourceSummary}</p>}
           <div className="mt-2 flex flex-wrap gap-2">{customerId && <Link href={`/customers/${customerId}`} className="text-[#006d37] underline underline-offset-2">查看客户档案</Link>}{sourceMeetingId && <Link href={`/meeting/${sourceMeetingId}`} className="text-[#006d37] underline underline-offset-2">查看来源会谈</Link>}{sourceChatSessionId && <Link href={`/chat?sessionId=${encodeURIComponent(sourceChatSessionId)}${customerId ? `&customerId=${encodeURIComponent(customerId)}` : ""}`} className="text-[#006d37] underline underline-offset-2">查看来源 AI 对话</Link>}</div>
         </div>

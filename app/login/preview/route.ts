@@ -5,6 +5,14 @@ export const runtime = "nodejs";
 
 const PREVIEW_MAX_AGE_SECONDS = 4 * 60 * 60;
 
+function isLocalPreviewHost(host: string | null) {
+  const value = (host || "").toLowerCase().replace(/^\[/, "").replace(/\].*$/, "").replace(/:\d+$/, "");
+  if (["localhost", "127.0.0.1", "::1"].includes(value)) return true;
+  const parts = value.split(".").map(Number);
+  return parts.length === 4 && parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)
+    && (parts[0] === 10 || parts[0] === 127 || (parts[0] === 192 && parts[1] === 168) || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31));
+}
+
 function browserUrl(request: NextRequest, pathname: string) {
   // Next dev 以 0.0.0.0 监听时 request.url 可能携带 0.0.0.0；手机不能跳转到
   // 该地址，因此必须保留浏览器实际访问的 Host（例如 192.168.x.x:3000）。
@@ -25,11 +33,19 @@ export async function GET(request: NextRequest) {
     loginUrl.searchParams.set("previewError", "missing-role");
     return NextResponse.redirect(loginUrl);
   }
+  if (!isLocalPreviewHost(request.headers.get("host"))) {
+    loginUrl.searchParams.set("previewError", "unavailable");
+    return NextResponse.redirect(loginUrl);
+  }
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/auth/local-preview-login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Store-AI-Preview-Origin": request.headers.get("host") || "",
+        "User-Agent": request.headers.get("user-agent") || "",
+      },
       body: JSON.stringify({ employeeId }),
       cache: "no-store",
     });

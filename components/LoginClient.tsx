@@ -109,7 +109,7 @@ export function LoginClient({ initialPreviewAccounts }: Props) {
           <section className="mt-6 border-t border-[#dce8de] pt-5">
             <div className="rounded-xl border border-[#cfe0d1] bg-[#f3faf4] p-3">
               <h2 className="text-[13px] font-bold text-[#1d3321]">本机免密体验</h2>
-              <p className="mt-1 text-[11px] leading-relaxed text-[#58705d]">仅当前电脑启动的局域网版本可用；不修改账号密码，体验会话 4 小时后自动失效。</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-[#58705d]">仅当前电脑启动的局域网版本可用；不修改账号密码，体验会话 4 小时后自动失效，签发会留下审计记录。</p>
               <div className="mt-3 grid gap-2">
                 {previewAccounts.map((account) => (
                   <a

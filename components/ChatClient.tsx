@@ -21,6 +21,7 @@ interface Msg {
   text: string;
   riskLevel?: string | null;
   answerType?: string | null;
+  generationMode?: string | null;
   feedbackType?: string | null;
   retrieved?: { chunkId?: string; documentId?: string; documentTitle?: string; snippet: string }[];
   methodology?: { id?: string; scenarioKey?: string; title: string; module?: string; source?: string }[];
@@ -32,6 +33,12 @@ const ANSWER_TYPE_LABEL: Record<string, string> = {
   general: "通用建议",
   need_confirm: "待确认",
   risk: "高风险·已升级",
+};
+const GENERATION_MODE_LABEL: Record<string, string> = {
+  model: "模型生成",
+  fallback: "资料/规则兜底",
+  safety_rule: "安全规则",
+  legacy: "历史记录",
 };
 
 const ANALYSIS_MARKER = "===ANALYSIS===";
@@ -206,7 +213,7 @@ function AiBubble({
           <details className="ref-chat-detail mt-2"><summary><span className="flex items-center gap-1.5"><InsightIcon />系统销售方法论（{m.methodology.length}）</span><ChevronIcon open={false} /></summary><div className="ref-chat-detail-content">{m.methodology.map((item, index) => <span key={`${item.id || item.scenarioKey || index}`} className="mb-1 block">{index + 1}. 《{item.title}》{item.module ? ` · ${item.module}` : ""}{item.source ? `\n来源：${item.source}` : ""}</span>)}<div className="mt-1 text-[11px] text-[var(--faint)]">仅用于销售判断与沟通策略；门店资料、价格与服务规则优先。</div></div></details>
         )}
 
-        {(m.answerType || m.riskLevel) && (
+        {(m.answerType || m.riskLevel || m.generationMode) && (
           <div className="mt-2 flex gap-1.5">
             {m.answerType && (
               <span className="ref-status ref-status-green">
@@ -218,6 +225,7 @@ function AiBubble({
                 {m.riskLevel}
               </span>
             )}
+            {m.generationMode && <span className="ref-status border border-[var(--line)] bg-white text-[var(--muted)]">{GENERATION_MODE_LABEL[m.generationMode] || m.generationMode}</span>}
           </div>
         )}
 
@@ -371,7 +379,8 @@ export function ChatClient({
     setMessages((m) => [...m, { id: uid, role: "user", text: question }]);
     setLoading(true);
     try {
-      const result = await chatApi.ask(question, sessionId, customerId);
+      const requestId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const result = await chatApi.ask(question, sessionId, customerId, requestId);
       if (!result.ok || !result.data) {
         throw new Error(result.error || "请求失败");
       }
@@ -379,7 +388,7 @@ export function ChatClient({
       setSessionId(d.sessionId);
       setMessages((m) => [
         ...m,
-        { id: d.messageId, role: "ai", text: d.answer, riskLevel: d.riskLevel, answerType: d.answerType, retrieved: d.retrieved, methodology: d.methodology },
+        { id: d.messageId, role: "ai", text: d.answer, riskLevel: d.riskLevel, answerType: d.answerType, generationMode: d.generationMode, retrieved: d.retrieved, methodology: d.methodology },
       ]);
       if (wasNew) {
         router.replace(chatHref({ nextSessionId: d.sessionId }));
@@ -411,7 +420,7 @@ export function ChatClient({
       const result = await response.json();
       if (!response.ok || !result.answer) throw new Error(result.error || "图片处理失败");
       setSessionId(result.sessionId || sessionId);
-      setMessages((m) => [...m, { id: result.messageId || "ai" + Date.now(), role: "ai", text: result.answer, riskLevel: result.riskLevel, answerType: result.answerType }]);
+      setMessages((m) => [...m, { id: result.messageId || "ai" + Date.now(), role: "ai", text: result.answer, riskLevel: result.riskLevel, answerType: result.answerType, generationMode: result.generationMode, retrieved: result.retrieved, methodology: result.methodology }]);
       if (wasNew && result.sessionId) router.replace(chatHref({ nextSessionId: result.sessionId }));
     } catch (error: any) {
       setMessages((m) => [...m, { id: "ei" + Date.now(), role: "ai", text: `图片处理失败：${error?.message || "请稍后重试。"}` }]);

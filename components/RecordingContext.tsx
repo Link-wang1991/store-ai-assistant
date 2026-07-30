@@ -16,7 +16,7 @@ function audioExt(mime: string) {
 // 模块级单例 — 录音状态 + MediaRecorder 引用，不受 React 重挂载影响
 // ================================================================
 
-let storeState = { isRecording: false, isPaused: false, isStopping: false, timer: "00:00", meetingId: null as string | null };
+let storeState = { isRecording: false, isPaused: false, isStopping: false, isUploading: false, uploadProgress: 0, uploadStatus: "", timer: "00:00", meetingId: null as string | null };
 let listeners: Array<() => void> = [];
 let mrRef: MediaRecorder | null = null;
 let streamRef: MediaStream | null = null;
@@ -33,6 +33,7 @@ type PendingAudioUpload = {
   blob: Blob;
   duration: number;
   createdAt: number;
+  originalName?: string;
 };
 
 // IndexedDB 在页面跳转、网络短暂中断后仍可保留同一份录音；内存 Map 是
@@ -113,7 +114,7 @@ function cleanupStore() {
   streamRef?.getTracks().forEach(t => t.stop());
   if (timerInterval) clearInterval(timerInterval);
   mrRef = null; streamRef = null; chunksRef = []; timerInterval = null; elapsed = 0;
-  storeState = { isRecording: false, isPaused: false, isStopping: false, timer: "00:00", meetingId: null };
+  storeState = { isRecording: false, isPaused: false, isStopping: false, isUploading: false, uploadProgress: 0, uploadStatus: "", timer: "00:00", meetingId: null };
   notify();
 }
 
@@ -137,34 +138,36 @@ async function markRecordingFailed(meetingId: string, reason: string) {
   }).catch(() => {});
 }
 
-async function uploadPendingAudio(upload: PendingAudioUpload) {
+async function uploadPendingAudio(upload: PendingAudioUpload, onProgress?: (percent: number) => void) {
   const ext = audioExt(upload.blob.type);
   const form = new FormData();
-  form.append("file", upload.blob, `meeting-${upload.meetingId}.${ext}`);
+  form.append("file", upload.blob, upload.originalName || `meeting-${upload.meetingId}.${ext}`);
   form.append("duration", String(upload.duration));
   const token = getToken();
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 120_000);
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/meetings/${upload.meetingId}/audio`, {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      body: form,
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload.code !== 200) throw new Error(payload.message || "录音上传失败，请检查网络后重试。");
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("上传超过 2 分钟未完成。录音已保留在本设备，可在详情页重新上传。");
-    }
-    if (error instanceof TypeError) {
-      throw new Error("上传连接中断。录音已保留在本设备，请恢复网络后在详情页重新上传。");
-    }
-    throw error;
-  } finally {
-    window.clearTimeout(timeout);
-  }
+  // fetch 目前没有跨浏览器稳定的上传进度事件。这里使用同源 XHR，既不把音频
+  // 复制到 Next 内存，也能明确告诉手机用户是“还在上传”还是“已落盘转写”。
+  await new Promise<void>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", `${API_BASE_URL}/api/meetings/${upload.meetingId}/audio`);
+    request.withCredentials = true;
+    request.timeout = 120_000;
+    if (token) request.setRequestHeader("Authorization", `Bearer ${token}`);
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+    };
+    request.onload = () => {
+      let payload: any = {};
+      try { payload = JSON.parse(request.responseText || "{}"); } catch { /* 非 JSON 错误也按状态处理 */ }
+      if (request.status >= 200 && request.status < 300 && (payload?.code === 200 || payload?.ok === true)) {
+        onProgress?.(100); resolve(); return;
+      }
+      reject(new Error(payload?.message || payload?.error || `录音上传失败（${request.status || "网络中断"}）`));
+    };
+    request.onerror = () => reject(new Error("上传连接中断。录音已保留在本设备，请恢复网络后在详情页重新上传。"));
+    request.ontimeout = () => reject(new Error("上传超过 2 分钟未完成。录音已保留在本设备，可在详情页重新上传。"));
+    request.onabort = () => reject(new Error("上传已取消。录音仍保留在本设备，可稍后重传。"));
+    request.send(form);
+  });
 }
 
 async function retryPendingAudioUpload(meetingId: string): Promise<{ ok: boolean; error?: string }> {
@@ -188,7 +191,7 @@ function preferredRecorderOptions(stream: MediaStream): MediaRecorderOptions | u
 
 function makeOnStop(mid: string, router: any) {
   return async () => {
-    storeState = { ...storeState, isStopping: true };
+    storeState = { ...storeState, isStopping: true, isUploading: true, uploadProgress: 0, uploadStatus: "正在安全保存录音…" };
     notify();
     streamRef?.getTracks().forEach(t => t.stop());
     if (timerInterval) clearInterval(timerInterval);
@@ -200,7 +203,10 @@ function makeOnStop(mid: string, router: any) {
       if (blob.size > MAX_AUDIO_BYTES) throw new Error("录音文件超过 60MB，请缩短本次会谈后重新录音。");
       const upload: PendingAudioUpload = { meetingId: mid, blob, duration: elapsed, createdAt: Date.now() };
       await savePendingAudio(upload);
-      await uploadPendingAudio(upload);
+      await uploadPendingAudio(upload, (percent) => {
+        storeState = { ...storeState, uploadProgress: percent, uploadStatus: percent >= 100 ? "录音已上传，正在提交语音转写…" : `正在上传录音 ${percent}%` };
+        notify();
+      });
       await clearPendingAudio(mid);
     } catch (error) {
       uploadError = error instanceof Error ? error.message : "录音上传失败，请稍后重试。";
@@ -211,27 +217,60 @@ function makeOnStop(mid: string, router: any) {
   };
 }
 
-async function doStartRecording(opts: { isNewCustomer: boolean; customerId: string; customerName: string; scene: string }, router: any) {
+async function createMeetingRecord(opts: { isNewCustomer: boolean; customerId: string; customerName: string; scene: string }) {
   const { isNewCustomer, customerId, customerName, scene } = opts;
+  const token = getToken();
+  await fetch(`${API_BASE_URL}/api/meetings/batch-fail-recording`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {} }).catch(() => {});
+  const effectiveName = isNewCustomer && !customerName.trim()
+    ? (() => { const now = new Date(); const p = (n: number) => String(n).padStart(2, "0"); return `新客户 ${p(now.getMonth()+1)}-${p(now.getDate())} ${p(now.getHours())}:${p(now.getMinutes())}`; })()
+    : customerName.trim();
+  const createRes = await fetch(`${API_BASE_URL}/api/meetings`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ customerId: isNewCustomer ? "" : customerId, customerName: effectiveName, scene, consent: true }),
+  });
+  const createData = await createRes.json().catch(() => ({}));
+  if (!createRes.ok || createData.code !== 200) throw new Error(createData.message || "创建会谈失败");
+  const meetingId = createData.data?.id;
+  if (!meetingId) throw new Error("创建会谈失败，请重试。");
+  return String(meetingId);
+}
+
+/** HTTP 局域网环境下 iPhone Safari 不会授予网页麦克风权限时，仍可选择已有录音上传并走同一 ASR 闭环。 */
+async function doUploadExistingAudio(opts: { isNewCustomer: boolean; customerId: string; customerName: string; scene: string }, file: File, router: any) {
+  if (!file || file.size < MIN_AUDIO_BYTES) return { ok: false, error: "请选择一段有效的音频文件。" };
+  if (file.size > MAX_AUDIO_BYTES) return { ok: false, error: "音频文件超过 60MB，请先裁剪后再上传。" };
+  try {
+    const meetingId = await createMeetingRecord(opts);
+    const upload: PendingAudioUpload = { meetingId, blob: file, duration: 0, createdAt: Date.now(), originalName: file.name };
+    await savePendingAudio(upload);
+    storeState = { isRecording: false, isPaused: false, isStopping: false, isUploading: true, uploadProgress: 0, uploadStatus: "正在上传已有录音…", timer: "00:00", meetingId };
+    notify();
+    try {
+      await uploadPendingAudio(upload, (percent) => {
+        storeState = { ...storeState, uploadProgress: percent, uploadStatus: percent >= 100 ? "音频已上传，正在提交语音转写…" : `正在上传录音 ${percent}%` };
+        notify();
+      });
+      await clearPendingAudio(meetingId);
+      router.push(`/meeting/${meetingId}`);
+      return { ok: true };
+    } catch (error) {
+      router.push(`/meeting/${meetingId}?uploadError=${encodeURIComponent(error instanceof Error ? error.message : "音频上传失败")}`);
+      return { ok: false, error: error instanceof Error ? error.message : "音频上传失败" };
+    } finally {
+      cleanupStore();
+    }
+  } catch (error) {
+    cleanupStore();
+    return { ok: false, error: error instanceof Error ? error.message : "创建会谈失败" };
+  }
+}
+
+async function doStartRecording(opts: { isNewCustomer: boolean; customerId: string; customerName: string; scene: string }, router: any) {
   if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-    return { ok: false, error: "当前是 http 访问，浏览器禁用了麦克风。录音需要 HTTPS。" };
+    return { ok: false, error: "当前浏览器未开放网页麦克风。局域网 HTTP 的 iPhone 请使用下方“上传已有录音”，或通过 HTTPS 访问后再录制。" };
   }
   try {
-    const t = getToken();
-    await fetch(`${API_BASE_URL}/api/meetings/batch-fail-recording`, { method: "POST", headers: { Authorization: `Bearer ${t}` } }).catch(() => {});
-
-    const effectiveName = isNewCustomer && !customerName.trim()
-      ? (() => { const now = new Date(); const p = (n: number) => String(n).padStart(2, "0"); return `新客户 ${p(now.getMonth()+1)}-${p(now.getDate())} ${p(now.getHours())}:${p(now.getMinutes())}`; })()
-      : customerName.trim();
-
-    const createRes = await fetch(`${API_BASE_URL}/api/meetings`, {
-      method: "POST", headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
-      body: JSON.stringify({ customerId: isNewCustomer ? "" : customerId, customerName: effectiveName, scene, consent: true }),
-    });
-    const createData = await createRes.json();
-    if (!createRes.ok || createData.code !== 200) throw new Error(createData.message || "创建会谈失败");
-    const mid = createData.data?.id;
-    if (!mid) throw new Error("创建会谈失败，请重试。");
+    const mid = await createMeetingRecord(opts);
 
     let stream: MediaStream;
     try {
@@ -259,7 +298,7 @@ async function doStartRecording(opts: { isNewCustomer: boolean; customerId: stri
       notify();
     }, 1000);
 
-    storeState = { isRecording: true, isPaused: false, isStopping: false, timer: "00:00", meetingId: mid };
+    storeState = { isRecording: true, isPaused: false, isStopping: false, isUploading: false, uploadProgress: 0, uploadStatus: "", timer: "00:00", meetingId: mid };
     notify();
     return { ok: true };
   } catch (e: any) {
@@ -300,8 +339,9 @@ function doStop() {
 // ================================================================
 
 interface RecordingContextValue {
-  isRecording: boolean; isPaused: boolean; isStopping: boolean; timer: string; meetingId: string | null;
+  isRecording: boolean; isPaused: boolean; isStopping: boolean; isUploading: boolean; uploadProgress: number; uploadStatus: string; timer: string; meetingId: string | null;
   startRecording: (opts: { isNewCustomer: boolean; customerId: string; customerName: string; scene: string }) => Promise<{ ok: boolean; error?: string }>;
+  uploadExistingAudio: (opts: { isNewCustomer: boolean; customerId: string; customerName: string; scene: string }, file: File) => Promise<{ ok: boolean; error?: string }>;
   pauseRecording: () => void; resumeRecording: () => void; stopRecording: () => void;
   hasPendingUpload: (meetingId: string) => Promise<boolean>;
   retryPendingUpload: (meetingId: string) => Promise<{ ok: boolean; error?: string }>;
@@ -335,6 +375,7 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
   const startRecording = useCallback(async (opts: { isNewCustomer: boolean; customerId: string; customerName: string; scene: string }) => {
     return doStartRecording(opts, routerRef.current);
   }, []);
+  const uploadExistingAudio = useCallback(async (opts: { isNewCustomer: boolean; customerId: string; customerName: string; scene: string }, file: File) => doUploadExistingAudio(opts, file, routerRef.current), []);
 
   const pauseRecording = useCallback(() => doPause(), []);
   const resumeRecording = useCallback(() => doResume(routerRef.current), []);
@@ -344,9 +385,9 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
   const discardPendingUpload = useCallback((meetingId: string) => clearPendingAudio(meetingId), []);
 
   const value: RecordingContextValue = {
-    isRecording: state.isRecording, isPaused: state.isPaused, isStopping: state.isStopping,
+    isRecording: state.isRecording, isPaused: state.isPaused, isStopping: state.isStopping, isUploading: state.isUploading, uploadProgress: state.uploadProgress, uploadStatus: state.uploadStatus,
     timer: state.timer, meetingId: state.meetingId,
-    startRecording, pauseRecording, resumeRecording, stopRecording,
+    startRecording, uploadExistingAudio, pauseRecording, resumeRecording, stopRecording,
     hasPendingUpload, retryPendingUpload, discardPendingUpload,
   };
 
@@ -364,20 +405,20 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
 
 function GlobalRecordingBar() {
   const router = useRouter();
-  const { isRecording, isPaused, isStopping, timer, pauseRecording, resumeRecording, stopRecording } = useRecording();
+  const { isRecording, isPaused, isStopping, isUploading, uploadProgress, uploadStatus, timer, pauseRecording, resumeRecording, stopRecording } = useRecording();
   const [expanded, setExpanded] = useState(false);
 
-  if (!isRecording) return null;
+  if (!isRecording && !isUploading) return null;
 
   if (!expanded) {
     return (
       <div
         onClick={() => setExpanded(true)}
         style={{ position: "fixed", bottom: "130px", right: "12px", zIndex: 999999, cursor: "pointer" }}
-        className="flex h-11 items-center gap-1.5 rounded-full bg-red-500 pr-3 pl-2 text-white shadow-lg transition-all active:scale-95"
+        className={`flex h-11 items-center gap-1.5 rounded-full pr-3 pl-2 text-white shadow-lg transition-all active:scale-95 ${isUploading ? "bg-[var(--green)]" : "bg-red-500"}`}
       >
         <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
-        <span className="text-[12px] font-mono font-medium">{timer}</span>
+        <span className="text-[12px] font-mono font-medium">{isUploading ? `${uploadProgress}%` : timer}</span>
       </div>
     );
   }
@@ -385,14 +426,14 @@ function GlobalRecordingBar() {
   return (
     <div
       style={{ position: "fixed", bottom: "130px", left: "50%", transform: "translateX(-50%)", zIndex: 999999 }}
-      className="flex items-center gap-2 rounded-2xl bg-red-500 px-3 py-2 text-white shadow-lg"
+      className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-white shadow-lg ${isUploading ? "bg-[var(--green)]" : "bg-red-500"}`}
     >
       <button onClick={() => router.push("/meeting")} className="flex items-center gap-1.5 active:opacity-70">
         <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
-        <span className="text-[13px] font-mono font-medium">{timer}</span>
+        <span className="text-[13px] font-mono font-medium">{isUploading ? `${uploadProgress}%` : timer}</span>
       </button>
-      {isStopping ? (
-        <span className="text-[11px] text-white/70">上传中…</span>
+      {isStopping || isUploading ? (
+        <span className="max-w-44 truncate text-[11px] text-white/80">{uploadStatus || "正在上传…"}</span>
       ) : (
         <div className="flex items-center gap-1.5">
           <button onClick={() => { isPaused ? resumeRecording() : pauseRecording(); }} className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20 active:bg-white/30">

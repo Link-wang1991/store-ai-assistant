@@ -161,7 +161,7 @@ export function RoleSwitcher() {
       sessionStorage.setItem("store_ai_preview_return_token", returnToken);
       sessionStorage.setItem("store_ai_employee_preview", "1");
       setToken(result.data.token);
-      window.location.href = "/home";
+      window.location.assign("/home");
     } catch {
       setError("员工身份体验没有完成，请稍后重试");
     } finally {
@@ -187,7 +187,7 @@ export function RoleSwitcher() {
       sessionStorage.setItem("store_ai_local_preview", "1");
       sessionStorage.removeItem("store_ai_employee_preview");
       sessionStorage.removeItem("store_ai_preview_return_token");
-      window.location.href = account.entry || "/home";
+      window.location.assign(account.entry || "/home");
     } catch {
       setError("本机角色切换没有完成，请确认电脑上的服务仍在运行。");
     } finally {
@@ -258,7 +258,7 @@ export function RoleSwitcher() {
             {localPreviewActive && localPreviewAccounts.length > 0 && (
               <section className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
                 <h3 className="text-sm font-semibold text-emerald-900">本机免密角色切换</h3>
-                <p className="mt-1 text-xs leading-5 text-emerald-800/80">仅当前电脑启动的局域网版本开放。切换后会按目标角色的真实数据权限重新加载，体验会话 4 小时后失效。</p>
+                <p className="mt-1 text-xs leading-5 text-emerald-800/80">仅当前电脑启动的局域网版本开放。切换后会按目标角色的真实数据权限重新加载，体验会话 4 小时后失效；每次签发均留审计记录。</p>
                 <div className="mt-2.5 grid gap-2">
                   {localPreviewAccounts.map((account) => (
                     <button

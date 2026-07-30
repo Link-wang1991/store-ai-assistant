@@ -84,6 +84,8 @@ const ADMIN_LINKS = [
   { key: "knowledge", href: "/admin/knowledge", label: "知识库" },
   { key: "reviews", href: "/admin/experience-reviews", label: "经验审核" },
   { key: "meetings", href: "/admin/meetings", label: "会谈复盘" },
+  { key: "reports", href: "/admin/quality-calibration", label: "评分校准" },
+  { key: "risks", href: "/admin/operations", label: "运行监控" },
   { key: "tasks", href: "/admin/tasks", label: "增长动作" },
   { key: "employees", href: "/admin/employees", label: "员工管理" },
   { key: "reports", href: "/admin/reports", label: "增长复盘" },

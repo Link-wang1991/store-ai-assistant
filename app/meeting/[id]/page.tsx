@@ -251,6 +251,53 @@ function QualityScoreCard({
   );
 }
 
+function QualityReviewCard({
+  automatedScore, reviewScore, reviewNote, reviewReasonCodes, reviewedBy, reviewedAt, canReview, saving, onReview,
+}: {
+  automatedScore: number | null;
+  reviewScore: number | null;
+  reviewNote?: string;
+  reviewReasonCodes?: unknown;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  canReview: boolean;
+  saving: boolean;
+  onReview: (score: number, note: string, reasonCodes: string[]) => void;
+}) {
+  const [note, setNote] = useState("");
+  const [reasonCodes, setReasonCodes] = useState<string[]>(() => {
+    if (Array.isArray(reviewReasonCodes)) return reviewReasonCodes.map(String);
+    if (typeof reviewReasonCodes === "string") {
+      try { const parsed = JSON.parse(reviewReasonCodes); return Array.isArray(parsed) ? parsed.map(String) : []; } catch { return []; }
+    }
+    return [];
+  });
+  const effectiveNote = note || reviewNote || "";
+  const reasonLabels: Record<string, string> = { need_discovery: "需求挖掘", deal_progress: "成交推进", service_experience: "服务体验", compliance: "合规表现", transcript_quality: "转写质量", other: "其他" };
+  const toggleReason = (code: string) => setReasonCodes((current) => current.includes(code) ? current.filter((item) => item !== code) : [...current, code]);
+  return (
+    <section className="mt-3 rounded-2xl border border-[var(--line)] bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-[13px] font-semibold text-[var(--ink)]">店长人工复核</h3>
+          <p className="mt-1 text-[10px] leading-relaxed text-[var(--faint)]">用于培训校准和复核留痕，不覆盖自动评分公式、逐字稿依据或合规红线。</p>
+        </div>
+        {reviewScore !== null && <span className="shrink-0 rounded-full bg-[var(--green-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--green-dark)]">已复核 {reviewScore} 分</span>}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+        <div className="rounded-lg bg-[var(--surface-2)]/60 p-2"><span className="text-[var(--faint)]">自动评分</span><b className="ml-1 text-[var(--ink)]">{automatedScore ?? "—"} 分</b></div>
+        <div className="rounded-lg bg-[var(--surface-2)]/60 p-2"><span className="text-[var(--faint)]">人工复核</span><b className="ml-1 text-[var(--ink)]">{reviewScore ?? "尚未复核"}</b></div>
+      </div>
+      {reviewScore !== null && <div className="mt-2 rounded-lg border border-[var(--line)] p-2 text-[11px] leading-relaxed text-[var(--muted)]"><p>{reviewNote || "未填写复核说明。"}</p>{reasonCodes.length > 0 && <p className="mt-1 text-[10px] text-[var(--faint)]">校准维度：{reasonCodes.map((code) => reasonLabels[code] || code).join("、")}</p>}<p className="mt-1 text-[10px] text-[var(--faint)]">复核人：{reviewedBy || "店长"}{reviewedAt ? ` · ${String(reviewedAt).replace("T", " ").slice(0, 16)}` : ""}</p></div>}
+      {canReview && <>
+        <div className="mt-3"><p className="text-[10px] text-[var(--faint)]">校准原因（可多选，用于统计自动评分偏差）</p><div className="mt-1.5 flex flex-wrap gap-1.5">{Object.entries(reasonLabels).map(([code, label]) => <button type="button" key={code} onClick={() => toggleReason(code)} className={`rounded-full border px-2 py-1 text-[10px] ${reasonCodes.includes(code) ? "border-[var(--green)] bg-[var(--green-soft)] text-[var(--green-dark)]" : "border-[var(--line)] text-[var(--muted)]"}`}>{label}</button>)}</div></div>
+        <textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} placeholder="复核依据（可选）：例如缺少需求确认、合规表达不够清楚。" className="mt-3 min-h-16 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[11px] outline-none focus:border-[var(--green)]" />
+        <div className="mt-2 grid grid-cols-5 gap-1.5">{[0, 25, 50, 75, 100].map((score) => <button key={score} onClick={() => onReview(score, effectiveNote, reasonCodes)} disabled={saving} className="rounded-lg border border-[var(--line)] px-1 py-2 text-[11px] font-semibold text-[var(--green-dark)] hover:border-[var(--green)] hover:bg-[var(--green-soft)] disabled:opacity-50">{saving ? "保存中" : `${score} 分`}</button>)}</div>
+      </>}
+    </section>
+  );
+}
+
 function Icon({ name, className = "" }: { name: string; className?: string }) {
   const paths: Record<string, string> = {
     clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
@@ -285,6 +332,7 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
   const [role, setRole] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [m, setM] = useState<any>(null);
+  const [diagnostics, setDiagnostics] = useState<any>(null);
   const [analysis, setAnalysis] = useState<any>(null);
   const [trans, setTrans] = useState<any[]>([]);
   const [employeeName, setEmployeeName] = useState("");
@@ -301,6 +349,7 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
   const [pendingLocalUpload, setPendingLocalUpload] = useState(false);
   const [reconcilingAction, setReconcilingAction] = useState(false);
   const [retryingClosure, setRetryingClosure] = useState(false);
+  const [reviewingQuality, setReviewingQuality] = useState(false);
   const [updatingSpeaker, setUpdatingSpeaker] = useState("");
   const [tab, setTab] = useState<"analysis" | "deep_review" | "distill" | "transcript">("analysis");
   const {
@@ -325,7 +374,8 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
       apiCall<any>(`/api/meetings/${bid}`),
       apiCall<any>(`/api/meetings/${bid}/analysis`),
       apiCall<any[]>(`/api/meetings/${bid}/transcripts`),
-    ]).then(([mr, ar, tr]) => {
+      apiCall<any>(`/api/meetings/${bid}/diagnostics`),
+    ]).then(([mr, ar, tr, dr]) => {
       const meeting = mr.status === "fulfilled" && mr.value?.ok ? mr.value.data : null;
       if (!meeting) { setError("会谈不存在"); setLoading(false); return; }
       setM(meeting);
@@ -334,6 +384,7 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
         setAnalysis(expandAnalysis(Array.isArray(list) && list.length > 0 ? list[0] : list));
       }
       if (tr.status === "fulfilled" && tr.value?.ok && Array.isArray(tr.value.data)) setTrans(tr.value.data);
+      if (dr.status === "fulfilled" && dr.value?.ok) setDiagnostics(dr.value.data);
       setLoading(false);
     });
   }, [router, meetingId]);
@@ -451,6 +502,26 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
       alert(error?.message || "重试业务闭环失败");
     } finally {
       setRetryingClosure(false);
+    }
+  }
+
+  async function handleQualityReview(score: number, note: string, reasonCodes: string[]) {
+    if (!isAdmin || reviewingQuality) return;
+    setReviewingQuality(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/meetings/${meetingId}/quality-review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ score, note, reason_codes: reasonCodes }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.code !== 200) throw new Error(result.message || "保存评分复核失败");
+      setAnalysis((current: any) => current ? { ...current, ...result.data } : current);
+      alert(result.data?.message || "人工复核已保存");
+    } catch (error: any) {
+      alert(error?.message || "保存评分复核失败");
+    } finally {
+      setReviewingQuality(false);
     }
   }
 
@@ -672,6 +743,7 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
 
       {/* 分析卡片 */}
       <div className="mx-4 mt-4">
+        {diagnostics && <section className="mb-3 rounded-2xl border border-[var(--line)] bg-white p-3 text-[11px]"><div className="flex items-center justify-between gap-2"><h2 className="font-semibold text-[var(--ink)]">录音与处理诊断</h2><span className={`rounded-full px-2 py-1 text-[10px] ${diagnostics.audio_stored ? "bg-[var(--green-soft)] text-[var(--green-dark)]" : "bg-amber-50 text-amber-700"}`}>{diagnostics.audio_stored ? "录音已落盘" : "录音未确认落盘"}</span></div><div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-[var(--muted)]"><p>上传：{diagnostics.audio_upload_state || "pending"}{diagnostics.audio_bytes ? ` · ${(Number(diagnostics.audio_bytes) / 1024 / 1024).toFixed(1)} MB` : ""}</p><p>ASR 提交：{diagnostics.asr_submit_attempts || 0} 次{diagnostics.asr_error_code ? ` · ${diagnostics.asr_error_code}` : ""}</p><p>ASR 轮询失败：{diagnostics.asr_poll_failures || 0}</p><p>分析重试：{diagnostics.analysis_attempts || 0} 次{diagnostics.analysis_error_code ? ` · ${diagnostics.analysis_error_code}` : ""}</p></div>{diagnostics.asr_retry_at && <p className="mt-2 text-[10px] text-[var(--faint)]">服务端下次自动重试：{String(diagnostics.asr_retry_at).replace("T", " ").slice(0, 16)}</p>}<p className="mt-2 rounded-lg bg-[var(--surface-2)]/70 p-2 text-[10px] leading-relaxed text-[var(--muted)]">下一步：{diagnostics.next_step}</p></section>}
         {m.status !== "done" ? (
           pendingLocalUpload && !m.audio_url && ["recording", "failed"].includes(m.status) ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[12px] text-amber-900">
@@ -755,6 +827,17 @@ export default function MeetingReportPage({ params }: { params: Promise<{ id: st
                   { label: "合规表现", weight: "20%", value: optionalScore(analysis.compliance_score), evidence: analysis.compliance_evidence },
                   { label: "服务体验", weight: "25%", value: optionalScore(analysis.service_score), evidence: analysis.service_evidence },
                 ]}
+              />
+              <QualityReviewCard
+                automatedScore={optionalScore(analysis.quality_score)}
+                reviewScore={optionalScore(analysis.quality_review_score)}
+                reviewNote={typeof analysis.quality_review_note === "string" ? analysis.quality_review_note : undefined}
+                reviewReasonCodes={analysis.quality_review_reason_codes}
+                reviewedBy={typeof analysis.quality_reviewed_by === "string" ? analysis.quality_reviewed_by : undefined}
+                reviewedAt={typeof analysis.quality_reviewed_at === "string" ? analysis.quality_reviewed_at : undefined}
+                canReview={isAdmin}
+                saving={reviewingQuality}
+                onReview={handleQualityReview}
               />
             </div>
 

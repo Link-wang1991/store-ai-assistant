@@ -14,6 +14,7 @@ interface Msg {
   text: string;
   riskLevel?: string | null;
   answerType?: string | null;
+  generationMode?: string | null;
   feedbackType?: string | null;
   retrieved?: { chunkId?: string; documentId?: string; documentTitle?: string; snippet: string }[];
   methodology?: { id?: string; scenarioKey?: string; title: string; module?: string; source?: string }[];
@@ -25,6 +26,12 @@ const ANSWER_TYPE_LABEL: Record<string, string> = {
   general: "通用建议",
   need_confirm: "待确认",
   risk: "高风险·已升级",
+};
+const GENERATION_MODE_LABEL: Record<string, string> = {
+  model: "模型生成",
+  fallback: "资料/规则兜底",
+  safety_rule: "安全规则",
+  legacy: "历史记录",
 };
 const ANALYSIS_MARKER = "===ANALYSIS===";
 
@@ -101,10 +108,11 @@ function ClassicAiBubble({ message, onFeedback, canCreateAction, onCreateAction,
         )}
         {message.retrieved && message.retrieved.length > 0 && <div className="mt-1.5 ml-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[10px] leading-relaxed text-slate-500"><div className="font-medium text-slate-700">本次引用的门店资料快照</div><p className="mt-0.5 text-slate-400">以下内容是生成本条回答时的命中依据。</p>{message.retrieved.map((item, index) => <div key={item.chunkId || index} className="mt-1 rounded-md bg-slate-50 px-2 py-1.5"><div className="flex justify-between gap-2"><span>{index + 1}. {item.documentTitle ? `《${item.documentTitle}》` : "门店资料"}</span>{item.documentId && <Link href={`/knowledge?source=${encodeURIComponent(item.documentId)}`} className="shrink-0 text-[var(--green-dark)] underline">查看</Link>}</div><div className="mt-0.5">{item.snippet}</div></div>)}</div>}
         {message.methodology && message.methodology.length > 0 && <div className="mt-1.5 ml-1 rounded-lg border border-[#b6e0c1] bg-[#f5faf5] px-2.5 py-2 text-[10px] leading-relaxed text-slate-600"><div className="font-medium text-[var(--green-dark)]">系统销售方法论</div>{message.methodology.map((item, index) => <div key={item.id || item.scenarioKey || index}>{index + 1}. 《{item.title}》{item.module ? ` · ${item.module}` : ""}</div>)}<div className="mt-1 text-slate-400">用于沟通策略，门店规则优先。</div></div>}
-        {(message.answerType || (message.riskLevel && message.riskLevel !== "L1")) && (
+        {(message.answerType || message.generationMode || (message.riskLevel && message.riskLevel !== "L1")) && (
           <div className="mt-1 flex gap-1.5 pl-1">
             {message.answerType && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">{ANSWER_TYPE_LABEL[message.answerType] || message.answerType}</span>}
             {message.riskLevel && message.riskLevel !== "L1" && <span className={`rounded-full px-2 py-0.5 text-[10px] ${RISK_LEVEL_COLORS[message.riskLevel as RiskLevel] || ""}`}>{message.riskLevel}</span>}
+            {message.generationMode && <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-500">{GENERATION_MODE_LABEL[message.generationMode] || message.generationMode}</span>}
           </div>
         )}
         <div className="mt-1 flex items-center gap-2 pl-1">
@@ -197,11 +205,12 @@ export function ClassicChatClient({
     setMessages((list) => [...list, { id: `u${Date.now()}`, role: "user", text: question }]);
     setLoading(true);
     try {
-      const result = await chatApi.ask(question, sessionId, customerId);
+      const requestId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const result = await chatApi.ask(question, sessionId, customerId, requestId);
       if (!result.ok || !result.data) throw new Error(result.error || "请求失败");
       const data = result.data;
       setSessionId(data.sessionId);
-      setMessages((list) => [...list, { id: data.messageId, role: "ai", text: data.answer, riskLevel: data.riskLevel, answerType: data.answerType, retrieved: data.retrieved, methodology: data.methodology }]);
+      setMessages((list) => [...list, { id: data.messageId, role: "ai", text: data.answer, riskLevel: data.riskLevel, answerType: data.answerType, generationMode: data.generationMode, retrieved: data.retrieved, methodology: data.methodology }]);
       if (isFirstMessage) router.replace(href({ nextSessionId: data.sessionId }));
     } catch {
       setMessages((list) => [...list, { id: `e${Date.now()}`, role: "ai", text: "⚠️ 网络不太稳定，请稍后重试。" }]);
@@ -227,7 +236,7 @@ export function ClassicChatClient({
       const result = await response.json();
       if (!response.ok || !result.answer) throw new Error(result.error || "图片处理失败");
       setSessionId(result.sessionId || sessionId);
-      setMessages((list) => [...list, { id: result.messageId || `ai${Date.now()}`, role: "ai", text: result.answer, riskLevel: result.riskLevel, answerType: result.answerType }]);
+      setMessages((list) => [...list, { id: result.messageId || `ai${Date.now()}`, role: "ai", text: result.answer, riskLevel: result.riskLevel, answerType: result.answerType, generationMode: result.generationMode, retrieved: result.retrieved, methodology: result.methodology }]);
       if (!sessionId && result.sessionId) router.replace(href({ nextSessionId: result.sessionId }));
     } catch (error: any) {
       setMessages((list) => [...list, { id: `e${Date.now()}`, role: "ai", text: `图片处理失败：${error?.message || "请稍后重试。"}` }]);

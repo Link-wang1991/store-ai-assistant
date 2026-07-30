@@ -25,7 +25,8 @@ frontend_ready() {
 }
 
 backend_ready() {
-  curl -fsS --max-time 3 http://127.0.0.1:8080/api-docs >/dev/null 2>&1
+  # /api-docs 只能证明 Java 端口已监听；/api/health 会同时校验数据库。
+  curl -fsS --max-time 3 http://127.0.0.1:8080/api/health >/dev/null 2>&1
 }
 
 relay_ready() {
