@@ -191,6 +191,9 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
               <h2>早上好，{userName}。今天有 <b>{stats.followup}</b> 项跟进、<em>{custs.filter((c) => c.pool === "risk").length}</em> 项风险需要处理</h2>
             </div>
             <div className="ref-welcome-actions">
+              {role === "super_admin" && (
+                <Link href="/platform" className="ref-management-pill">平台管理</Link>
+              )}
               {(role === "owner" || role === "admin" || role === "manager") && (
                 <Link href="/admin" className="ref-management-pill">管理</Link>
               )}

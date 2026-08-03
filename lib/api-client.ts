@@ -108,17 +108,6 @@ async function backendApi<T>(
 // ============================================================
 
 // -- 认证 --
-export type RegisterData = {
-  token: string;
-  userId: string;
-  employeeId: string;
-  storeId: string;
-  role: string;
-  roleLabel: string;
-  storeName: string;
-  name: string;
-};
-
 export const authApi = {
   async login(email: string, password: string) {
     const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
@@ -129,31 +118,6 @@ export const authApi = {
     const json = await res.json();
     if (!res.ok || json.code !== 200) {
       return { ok: false, error: json.message || "登录失败" } as const;
-    }
-    return {
-      ok: true,
-      data: {
-        token: json.data?.token || "",
-        userId: json.data?.userId || "",
-        employeeId: json.data?.employeeId || "",
-        storeId: json.data?.storeId || "",
-        role: json.data?.role || "",
-        roleLabel: json.data?.roleLabel || "",
-        storeName: json.data?.storeName || "",
-        name: json.data?.name || "",
-      },
-    } as const;
-  },
-
-  async register(email: string, password: string, name: string, storeName: string) {
-    const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name, storeName }),
-    });
-    const json = await res.json();
-    if (!res.ok || json.code !== 200) {
-      return { ok: false, error: json.message || "注册失败" } as const;
     }
     return {
       ok: true,
