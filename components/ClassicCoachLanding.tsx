@@ -31,12 +31,10 @@ interface CustLite {
  * 仅在路由与客户选择上接入当前的会话绑定规则。
  */
 export function ClassicCoachLanding({
-  storeName,
   isAdmin,
   sessions,
   onSessionDelete,
 }: {
-  storeName: string;
   isAdmin: boolean;
   sessions: SessionLite[];
   onSessionDelete?: (id: string) => void | Promise<void>;
@@ -83,20 +81,9 @@ export function ClassicCoachLanding({
 
   return (
     <div className="classic-coach min-h-screen bg-[var(--page)] pb-20">
-      <header className="sticky top-0 z-30 border-b border-[var(--line)] bg-white px-4 py-3">
-        <div className="relative flex items-center justify-center">
-          <button
-            onClick={() => router.push("/home")}
-            className="absolute left-0 flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[15px] font-bold text-[var(--ink)] transition hover:bg-[var(--line)]"
-            aria-label="返回首页"
-          >
-            ←
-          </button>
-          <div className="text-center">
-            <div className="text-[15px] font-semibold text-[var(--ink)]">AI 教练</div>
-            <div className="text-[11px] text-[var(--faint)]">{storeName} · 选场景 / 选客户 / 自由问</div>
-          </div>
-        </div>
+      <header className="ref-coach-header">
+        <h1>AI 教练</h1>
+        <p>选客户 / 看话术 / 自由问</p>
       </header>
       <CoachModeTabs active="classic" />
 

@@ -87,7 +87,7 @@ function ChatPageInner() {
   const isLanding = !q && !customerId && !sessionIdParam && !isNew;
   if (isLanding) {
     if (view === "classic") {
-      return <ClassicCoachLanding storeName="门店 AI 经营助手" isAdmin={String(role) === "owner" || String(role) === "manager" || String(role) === "admin"} sessions={sessions} onSessionDelete={handleSessionDelete} />;
+      return <ClassicCoachLanding isAdmin={String(role) === "owner" || String(role) === "manager" || String(role) === "admin"} sessions={sessions} onSessionDelete={handleSessionDelete} />;
     }
     return <CoachLanding mode={view === "classic" ? "classic" : "workbench"} isAdmin={String(role) === "owner" || String(role) === "manager" || String(role) === "admin"} />;
   }

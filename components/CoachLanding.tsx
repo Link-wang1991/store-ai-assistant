@@ -94,6 +94,12 @@ export function CoachLanding({
   return (
     <div className={`ref-app ${classic ? "ref-chat-standard" : "ref-chat-workbench"}`}>
       <div className="ref-canvas">
+      {!classic && (
+        <header className="ref-coach-header">
+          <h1>AI 教练</h1>
+          <p>选客户 / 看话术 / 自由问</p>
+        </header>
+      )}
       <CoachModeTabs active={mode} />
 
       <main className="ref-chat-main space-y-4">
