@@ -12,7 +12,6 @@ import { MAIN_NAV } from "@/components/BottomNav";
 import { SCENE_LABEL } from "@/lib/scenes";
 import { fmtTime } from "@/lib/format";
 import { decodeJwtPayload } from "@/lib/jwt";
-import { Brand } from "@/components/Brand";
 import { AppLoading } from "@/components/AppLoading";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -94,11 +93,6 @@ export default function MeetingPage() {
   return (
     <div className="ref-app">
       <div className="ref-canvas">
-      <header className="ref-topbar">
-        <Brand />
-        <button onClick={() => router.push("/customers")} className="ref-icon-button" aria-label="搜索客户"><svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.2-4.2"/></svg></button>
-      </header>
-
       {/* 录音区 */}
       <MeetingClient myCustomers={myCustomers} otherCustomers={otherCustomers} />
 
@@ -121,7 +115,10 @@ export default function MeetingPage() {
                   href={`/meeting/${m.id}`}
                   className="ref-card ref-history-card ref-card-lift block"
                 >
-                  <span className={`ref-history-icon ${m.status === "done" ? "green" : m.status === "failed" ? "red" : m.status === "analyzing" ? "purple" : "gold"}`} aria-hidden="true"><MeetingStatusIcon status={m.status} /></span>
+                  <span className="group relative inline-flex shrink-0">
+                    <span className={`ref-history-icon ${m.status === "done" ? "green" : m.status === "failed" ? "red" : m.status === "analyzing" ? "purple" : "gold"}`} aria-hidden="true"><MeetingStatusIcon status={m.status} /></span>
+                    <span role="tooltip" className="pointer-events-none absolute left-full top-1/2 z-30 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-[#1f2a22] px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">{STATUS_LABEL[m.status] || m.status}</span>
+                  </span>
                   <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
@@ -193,13 +190,6 @@ export default function MeetingPage() {
                         {SCENE_LABEL[m.scene] || m.scene}
                       </span>
                     </div>
-                    <span className={`ref-status ${
-                      m.status === "done" ? "ref-status-green" :
-                      m.status === "failed" ? "ref-status-red" :
-                      m.status === "analyzing" ? "ref-status-purple" : "ref-status-yellow"
-                    }`}>
-                      {STATUS_LABEL[m.status] || m.status}
-                    </span>
                     {m.status === "done" && typeof (m.quality_score ?? m.qualityScore) === "number" && (
                       <span className="ref-status ref-status-blue">
                         质量分 {m.quality_score ?? m.qualityScore}

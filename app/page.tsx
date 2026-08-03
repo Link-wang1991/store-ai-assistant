@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Brand } from "@/components/Brand";
 
 const FEATURES = [
   {
@@ -80,7 +79,6 @@ export default function Home() {
     <main className="welcome-page">
       <div className="welcome-content">
         {/* 顶部身份标 */}
-        <div className="welcome-brand"><Brand title="门店 AI 经营助手" /></div>
         <div className="welcome-eyebrow">专为美业门店打造的 AI 经营助手</div>
 
         {/* 主标题 */}

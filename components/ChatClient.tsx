@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { RISK_LEVEL_COLORS, type RiskLevel } from "@/lib/constants";
 import { chatApi, type AiActionProposal, type ActionProposalAssignee } from "@/lib/api-client";
 import { BottomNav, STAFF_NAV } from "@/components/BottomNav";
-import { Brand } from "@/components/Brand";
 import { CoachModeTabs } from "@/components/CoachModeTabs";
 
 interface SessionItem {
@@ -439,10 +438,6 @@ export function ChatClient({
 
   return (
     <div className="ref-chat">
-      <header className="ref-topbar">
-        <button onClick={() => router.push(view === "classic" ? "/chat?view=classic" : "/chat")} className="text-left"><Brand /></button>
-        <button onClick={() => router.push("/admin")} className="ref-management-pill">管理</button>
-      </header>
       <CoachModeTabs active={view} />
 
       <main ref={scrollRef} className="ref-chat-main no-scrollbar max-h-[calc(100vh-88px)] overflow-y-auto">

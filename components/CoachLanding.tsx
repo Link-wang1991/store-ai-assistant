@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BottomNav, MAIN_NAV, STAFF_NAV, type NavItem } from "@/components/BottomNav";
 import { customerApi } from "@/lib/api-client";
-import { Brand } from "@/components/Brand";
 import { CoachModeTabs } from "@/components/CoachModeTabs";
 import { fmtTime } from "@/lib/format";
 
@@ -95,10 +94,6 @@ export function CoachLanding({
   return (
     <div className={`ref-app ${classic ? "ref-chat-standard" : "ref-chat-workbench"}`}>
       <div className="ref-canvas">
-      <header className="ref-topbar">
-        <button onClick={() => router.push("/home")} className="text-left"><Brand /></button>
-        <button onClick={() => router.push("/admin")} className="ref-management-pill">管理</button>
-      </header>
       <CoachModeTabs active={mode} />
 
       <main className="ref-chat-main space-y-4">
@@ -141,16 +136,31 @@ export function CoachLanding({
           <p className="mt-3 text-[16px] italic leading-relaxed text-[#1e2a20]">{directScript}</p>
         </section>
 
-        <section className="ref-coach-grid"><div className="ref-card ref-coach-mini"><div className="mb-3 flex items-center gap-1.5 text-[15px] font-bold text-[#9b59b6]"><QuestionIcon />接下来要问</div><p className="text-[13px] leading-relaxed text-[#3d4a3e]">1. {nextQuestions[0]}<br />2. {nextQuestions[1]}</p></div><div className="ref-card ref-coach-mini"><div className="mb-3 flex items-center gap-1.5 text-[15px] font-bold text-[#006d37]"><ActionIcon />下一步动作</div><p className="text-[14px] font-bold text-[#161d17]">{nextAction}</p><p className="mt-1 text-[11px] text-[#6c7b6d]">负责人：{advisorLabel(selectedCustomer?.assignedTo, isAdmin ? "当前负责人" : "当前员工")}</p></div></section>
+        <section className="ref-coach-grid">
+          <div className="ref-card ref-coach-mini">
+            <div className="mb-2 flex items-center gap-1.5 text-[13px] font-bold text-[#006d37]">
+              <QuestionIcon />接下来要问
+            </div>
+            <p className="text-[13px] leading-relaxed text-[#3d4a3e]">1. {nextQuestions[0]}<br />2. {nextQuestions[1]}</p>
+          </div>
+          <div className="ref-card ref-coach-mini">
+            <div className="mb-2 flex items-center gap-1.5 text-[13px] font-bold text-[#006d37]">
+              <ActionIcon />下一步动作
+            </div>
+            <p className="text-[13px] leading-relaxed text-[#3d4a3e]">{nextAction}</p>
+            <p className="mt-1 text-[11px] text-[#6c7b6d]">负责人：{advisorLabel(selectedCustomer?.assignedTo, isAdmin ? "当前负责人" : "当前员工")}</p>
+          </div>
+        </section>
 
         <section className={`ref-coach-risk ${selectedCustomer?.concerns ? "" : "ref-coach-reminder"}`}><WarningIcon /><div><b className="block text-[14px] text-[#c4392e]">{selectedCustomer?.concerns ? "风险提醒" : "沟通提醒"}</b><p className="mt-1 text-[13px] leading-relaxed text-[#b53a31]">{selectedCustomer?.concerns || "涉及价格、承诺、效果或投诉时，先确认事实与客户感受，再给出下一步方案。"}</p></div></section>
 
-        <section className="ref-card ref-coach-script mt-4">
+        <section className="ref-card ref-coach-script">
           <div className="ref-coach-label"><CoachMark />本次教练上下文</div>
           <p className="text-[13px] leading-relaxed text-[#3d4a3e]">{contextSummary}</p>
           <div className="mt-4 border-t border-[#e9ecef] pt-3 text-right"><button onClick={goCustomer} className="ref-primary min-h-[40px] px-4">▷ 开始完整对话</button></div>
         </section>
 
+        <div className="h-10" />
       </main>
       <div className="ref-chat-input-wrap"><div className="ref-chat-input"><button onClick={() => router.push(chatHref())} title="在完整对话中上传图片"><PlusIcon /></button><input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && q.trim()) go(q.trim()); }} placeholder="向教练提问..." className="min-w-0 flex-1 bg-transparent px-1 text-[13px] outline-none" /><button disabled className="opacity-45" title="录音暂未开放"><MicIcon /></button><button onClick={() => q.trim() && go(q.trim())} disabled={!q.trim()} className="send disabled:opacity-50"><SendIcon /></button></div></div>
       <BottomNav items={nav} />

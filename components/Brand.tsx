@@ -1,9 +1,9 @@
 import Image from "next/image";
 
-export function Brand({ compact = false, title = "门店 AI Inbox" }: { compact?: boolean; title?: string }) {
+export function Brand({ compact = false, title = "门店 AI 经营助手" }: { compact?: boolean; title?: string }) {
   return (
     <span className={`ref-brand ${compact ? "ref-brand-compact" : ""}`}>
-      <Image src="/icon.svg" alt="门店 AI Inbox" width={32} height={32} className="ref-brand-logo" priority={compact} />
+      <Image src="/icon.svg" alt="门店 AI 经营助手" width={32} height={32} className="ref-brand-logo" priority={compact} />
       <span>{title}</span>
     </span>
   );

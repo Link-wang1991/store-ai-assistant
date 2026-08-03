@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BottomNav, MAIN_NAV } from "@/components/BottomNav";
 import { customerApi } from "@/lib/api-client";
-import { Brand, AccountIcon } from "@/components/Brand";
+import { AccountIcon } from "@/components/Brand";
 import { STAGE_LABEL } from "@/lib/opportunity";
 import { fmtTime } from "@/lib/format";
 
@@ -38,7 +38,7 @@ export function CustomerProfileApiFallback({ customerId }: { customerId: string 
   };
 
   return <div className="ref-app"><div className="ref-canvas">
-    <header className="ref-topbar"><div className="flex min-w-0 items-center gap-1"><Link href="/customers" className="ref-icon-button" aria-label="返回客户列表">←</Link><Brand /></div><Link href="/me" className="ref-customer-account" aria-label="进入我的"><AccountIcon /></Link></header>
+    <header className="ref-topbar"><Link href="/customers" className="ref-icon-button" aria-label="返回客户列表">←</Link><Link href="/me" className="ref-customer-account" aria-label="进入我的"><AccountIcon /></Link></header>
     <main className="ref-profile ref-customer-profile">
       <section className="ref-customer-hero"><div className="ref-profile-avatar">{name.slice(0, 1)}</div><div className="mt-5"><div className="flex flex-wrap items-baseline gap-2"><h1 className="ref-profile-name">{name}</h1><span className="text-[13px] text-[#3d4a3e]">{phoneTail}</span></div><span className="ref-customer-tier">{stage}</span><p className="mt-2 text-[15px] text-[#3d4a3e]">{lastVisit ? `上次服务：${fmtTime(lastVisit)}` : "上次服务：暂未记录"}</p></div><div className="ref-profile-actions"><Link href={`/chat?customerId=${customer.id}&new=1`} className="ref-primary gap-2 px-5"><ChatIcon />开始咨询</Link><a href={customer.phone ? `tel:${customer.phone}` : undefined} className="ref-secondary gap-2 px-5"><PhoneIcon />致电</a></div></section>
       <section className="ref-card ref-brief"><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><SparkIcon /><h2 className="mb-0 text-[16px] font-bold tracking-tight text-[#172119]">今日简报</h2></div><span className="rounded bg-[#f1f6f2] px-2 py-1 text-[10px] font-bold text-[#6d796f]">AI 洞察</span></div><div className="ref-brief-grid"><div><h3 className="ref-eyebrow">核心需求 &amp; 待办承诺</h3><p className="mt-3 flex gap-2 text-[14px] leading-relaxed text-[#253527]"><CheckIcon /><span>{suggestion}</span></p>{concerns ? <p className="mt-3 flex gap-2 text-[14px] leading-relaxed text-[#c4392e]"><WarningIcon /><span>{concerns}</span></p> : <p className="mt-3 flex gap-2 text-[13px] leading-relaxed text-[#5b7460]"><CheckIcon /><span>当前没有已记录的风险提示，沟通时继续确认服务感受即可。</span></p>}<div className="mt-5"><div className="mb-2 text-[13px] font-bold text-[#3d4a3e]">关键提问（3个）</div><ol className="space-y-1 text-[13px] leading-relaxed text-[#3d4a3e]"><li>1. 上次服务后的感受如何？</li><li>2. 目前最在意的效果是什么？</li><li>3. 下一次方便安排在什么时候？</li></ol></div></div><div className="ref-opening-script"><h3 className="text-[13px] font-bold text-[#006d37]">开场白建议</h3><p className="mt-2 text-[14px] italic leading-relaxed text-[#253527]">“{name}，您好！想跟您确认一下上次服务后的感受。我们已准备了更适合您的下一步方案。”</p></div></div></section>

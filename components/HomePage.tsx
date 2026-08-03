@@ -8,7 +8,6 @@ import { assignPool, type PoolCustomer } from "@/lib/customer-pools";
 import { STAGE_LABEL } from "@/lib/opportunity";
 import { fmtDate } from "@/lib/format";
 import { BottomNav, type NavItem } from "@/components/BottomNav";
-import { Brand } from "@/components/Brand";
 import { AppLoading } from "@/components/AppLoading";
 import { decodeJwtPayload } from "@/lib/jwt";
 
@@ -185,24 +184,20 @@ export default function HomePage({ navItems }: { navItems: NavItem[] }) {
   return (
     <div className="ref-app">
       <div className="ref-canvas">
-        <header className="ref-topbar">
-          <Brand />
-          {(role === "owner" || role === "admin" || role === "manager") ? (
-            <Link href="/admin" className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-[12px] font-bold text-[#078a4c] transition hover:bg-[#eef8f0]">
-              <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63a1.7 1.7 0 0 0 1-1.55V3h4v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9a1.7 1.7 0 0 0 1.55 1H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z" /></svg>管理
-            </Link>
-          ) : <span className="ref-icon-button" aria-hidden="true">⌕</span>}
-        </header>
-
         <main className="ref-main">
           <section className="ref-welcome">
             <div className="ref-welcome-copy">
               <p className="ref-welcome-date">{new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(new Date())}</p>
               <h2>早上好，{userName}。今天有 <b>{stats.followup}</b> 项跟进、<em>{custs.filter((c) => c.pool === "risk").length}</em> 项风险需要处理</h2>
             </div>
-            <Link href="/chat" className="ref-mic-fab" aria-label="向 AI 教练提问">
-              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17v4M8.5 21h7"/></svg>
-            </Link>
+            <div className="ref-welcome-actions">
+              {(role === "owner" || role === "admin" || role === "manager") && (
+                <Link href="/admin" className="ref-management-pill">管理</Link>
+              )}
+              <Link href="/chat" className="ref-mic-fab" aria-label="向 AI 教练提问">
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17v4M8.5 21h7"/></svg>
+              </Link>
+            </div>
           </section>
           <label className="ref-search">
             <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.2-4.2"/></svg>

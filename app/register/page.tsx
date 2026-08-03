@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { authApi } from "@/lib/api-client";
-import { Brand } from "@/components/Brand";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
@@ -42,7 +41,6 @@ export default function RegisterPage() {
     return (
       <div className="auth-shell flex min-h-screen flex-col justify-center px-6">
         <div className="auth-panel text-center">
-          <div className="auth-brand"><Brand title="门店 AI 经营助手" /></div>
           <div className="auth-success-mark" aria-hidden="true">✓</div>
           <h1 className="auth-title">注册成功</h1>
           <p className="auth-subtitle">你的门店已经创建好了，现在去登录吧。</p>
@@ -61,7 +59,6 @@ export default function RegisterPage() {
     <div className="auth-shell flex min-h-screen flex-col justify-center px-6">
       <div className="auth-panel">
       <div className="mb-8 text-center">
-        <div className="auth-brand"><Brand title="门店 AI 经营助手" /></div>
         <h1 className="auth-title">创建门店账号</h1>
         <p className="auth-subtitle">注册后自动创建门店，你就是老板</p>
       </div>

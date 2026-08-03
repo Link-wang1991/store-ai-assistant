@@ -12,7 +12,6 @@ import { AppLoading } from "@/components/AppLoading";
 export default function MePage() {
   const router = useRouter();
   const [role, setRole] = useState("");
-  const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,7 +20,6 @@ export default function MePage() {
     const p = decodeJwtPayload(t);
     if (!p) { router.replace("/login"); return; }
     setRole(p.role || "");
-    setName(p.role === "owner" ? "老板" : p.role === "manager" ? "店长" : p.role === "consultant" ? "咨询师" : p.role === "beautician" ? "美容师" : p.role === "receptionist" ? "前台" : p.role === "operator" ? "运营" : "");
     setLoading(false);
   }, [router]);
 
@@ -32,16 +30,6 @@ export default function MePage() {
 
   return (
     <div className="me-page min-h-screen pb-20">
-      <header className="me-header flex items-center justify-between px-4 py-4">
-        <div>
-          <div className="text-[20px] font-semibold tracking-tight text-[#172119]">{name}</div>
-          <div className="mt-0.5 text-xs text-[#718077]">{role === "owner" ? "老板" : role === "manager" ? "店长" : role === "consultant" ? "咨询师" : role === "beautician" ? "美容师" : role === "receptionist" ? "前台" : role === "operator" ? "运营" : role} · 门店 AI 经营助手</div>
-        </div>
-        <div className="me-avatar flex h-11 w-11 items-center justify-center rounded-full text-lg font-semibold">
-          {name.slice(0, 1)}
-        </div>
-      </header>
-
       <div className="me-content space-y-7 p-4">
         <section>
           <div className="me-section-title">常用</div>

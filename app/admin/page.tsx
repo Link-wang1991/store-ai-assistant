@@ -6,7 +6,7 @@ import Link from "next/link";
 import { customerApi, getToken, knowledgeApi, meetingApi, taskApi } from "@/lib/api-client";
 import { decodeJwtPayload } from "@/lib/jwt";
 import { BottomNav, MAIN_NAV } from "@/components/BottomNav";
-import { AccountIcon, Brand } from "@/components/Brand";
+import { AccountIcon } from "@/components/Brand";
 
 const ADMIN_ICONS: Record<string, React.ReactNode> = {
   customers: (
@@ -152,7 +152,7 @@ export default function AdminPage() {
     <div className="ref-app ref-admin-page">
       <div className="ref-canvas">
       <header className="ref-topbar">
-        <div className="flex min-w-0 items-center gap-1"><Link href="/me" className="ref-icon-button" aria-label="返回">←</Link><Brand /></div>
+        <Link href="/me" className="ref-icon-button" aria-label="返回">←</Link>
         <div className="flex items-center gap-3"><span className="hidden text-[11px] font-medium text-[#718077] md:inline">门店助手 · 店长模式</span><span className="ref-customer-account"><AccountIcon /></span></div>
       </header>
 

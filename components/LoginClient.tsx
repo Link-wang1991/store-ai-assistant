@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Brand } from "@/components/Brand";
 
 export type LocalPreviewAccount = {
   employeeId: string;
@@ -67,7 +66,6 @@ export function LoginClient({ initialPreviewAccounts }: Props) {
     <div className="auth-shell flex min-h-screen flex-col justify-center px-6">
       <div className="auth-panel">
         <div className="mb-8 text-center">
-          <div className="auth-brand"><Brand title="门店 AI 经营助手" /></div>
           <h1 className="auth-title">欢迎回来</h1>
           <p className="auth-subtitle">员工工作指导 · 老板经营管理</p>
         </div>
