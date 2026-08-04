@@ -88,7 +88,7 @@ function TasksPageContent() {
   if (loading) return <AppLoading label="正在读取我的任务…" />;
 
   return <div className="ref-app"><div className="ref-canvas">
-    <header className="ref-topbar"><button onClick={() => router.push("/home")} className="ref-icon-button" aria-label="返回首页">←</button><div><h1 className="text-[17px] font-bold text-[#161d17]">{todayOnly ? "今日待跟进" : "我的任务"}</h1><p className="text-[10px] text-[#738077]">{todayOnly ? "仅显示今天截止或已逾期的正式待办" : "每项任务均保留客户和业务来源"}</p></div></header>
+    <header className="ref-topbar tasks-topbar"><button onClick={() => router.push("/home")} className="ref-icon-button tasks-back" aria-label="返回首页">←</button><div className="tasks-title"><h1 className="text-[17px] font-bold text-[#161d17]">{todayOnly ? "今日待跟进" : "我的任务"}</h1><p className="text-[10px] text-[#738077]">{todayOnly ? "仅显示今天截止或已逾期的正式待办" : "每项任务均保留客户和业务来源"}</p></div></header>
     <main className="ref-main space-y-3">
       {notice && <p role="status" className="rounded-xl border border-[#d8e6da] bg-white px-3 py-2 text-[12px] text-[#3d4a3e]">{notice}</p>}
       {visibleTasks.length === 0 ? <div className="ref-empty">{todayOnly ? "今天没有到期或逾期的正式待办。" : "暂无分配给你的待办。"}</div> : visibleTasks.map((task) => {
